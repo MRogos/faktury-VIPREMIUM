@@ -310,76 +310,72 @@ function periodLabel(){
 function coLabel(){return (CO_NAV.find(c=>c.id===selCo)||{name:'Wszystkie'}).name;}
 
 // LEDGER
+function ledgerRow(i){
+  const co=COS.find(x=>x.id===i.company);
+  const unpaid=i.type==='buy'&&!i.paid;
+  return `<tr style="${unpaid?'background:rgba(240,176,96,.04)':''}">
+    <td>${i.date||'—'}</td>
+    <td>${co?co.short:'?'}</td>
+    <td style="font-family:var(--font);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+      ${unpaid?'<span style="color:var(--amber);font-size:10px;margin-right:4px">●</span>':''}
+      ${i.num?i.num+' &middot; ':''}<span style="opacity:.6">${(i.contractor||i.description||'—').slice(0,45)}</span>
+      ${i.nbpInfo?'<span title="'+i.nbpInfo+'" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">€</span>':''}
+    </td>
+    <td style="text-align:right">${fmt(calcN(i.brutto,i.vatRate))}</td>
+    <td style="text-align:right;opacity:.6">${i.vatRate}%</td>
+    <td style="text-align:right;color:var(--accent)">${fmt(i.brutto)}</td>
+    <td style="text-align:center">${i.type==='buy'?'<input type="checkbox" '+(i.paid?'checked':'')+' onchange="togglePaid(''+i.id+'',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">':'—'}</td>
+    <td><button class="sm danger" onclick="delInv(''+i.id+'')">✕</button></td>
+  </tr>`;
+}
+
+function makeTable(rows, title, color){
+  if(!rows.length) return '<div class="card" style="border:0.5px solid '+color+'20"><div style="color:'+color+';font-weight:600;font-size:13px;margin-bottom:8px">'+title+' — brak pozycji</div></div>';
+  const isCosts=title.includes('KOSZTY');
+  const allPaid=isCosts&&rows.every(i=>i.paid);
+  let h='<div class="card" style="border:0.5px solid '+color+'30;padding:0;overflow:hidden">'
+    +'<div style="padding:10px 14px;background:'+color+'08;border-bottom:0.5px solid '+color+'20;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-weight:600;font-size:13px;color:'+color+'">'+title+' <span style="font-weight:400;opacity:.7;font-size:12px">('+rows.length+')</span></span>'
+    +(isCosts?'<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px"><input type="checkbox" id="chk-all" '+(allPaid?'checked':'')+'  onchange="markAllPaid(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)"> Zaznacz wszystkie opłacone</label>':'')
+    +'</div>'
+    +'<div class="tbl-wrap"><table><thead><tr>'
+    +'<th>Data</th><th>Firma</th><th>Nr / Kontrahent</th>'
+    +'<th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th>'
+    +'<th style="text-align:right">Brutto</th><th style="text-align:center">Opłac.</th><th></th>'
+    +'</tr></thead><tbody>';
+  rows.forEach(i=>{ h+=ledgerRow(i); });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+
 function renderLedger(){
   document.getElementById('ledger-sub').textContent=coLabel()+' · '+periodLabel();
   const all=stats('all');
-  document.getElementById('ledger-metrics').innerHTML=`<div class="metrics">
-    <div class="metric"><div class="ml">Przychody brutto</div><div class="mv">${fmt(all.gI)}</div></div>
-    <div class="metric"><div class="ml">Koszty brutto</div><div class="mv">${fmt(all.gO)}</div></div>
-    <div class="metric"><div class="ml">Wynik netto</div><div class="mv ${all.bal>=0?'pos':'neg'}">${fmt(all.bal)}</div></div>
-    <div class="metric"><div class="ml">VAT do zapłaty</div><div class="mv ${all.vatDue>0?'warn':all.vatDue<0?'pos':''}">${fmt(all.vatDue)}</div></div>
-    <div class="metric" style="border:0.5px solid rgba(96,200,144,.3)"><div class="ml">✓ Koszty opłacone</div><div class="mv pos">${fmt(all.pO)}</div></div>
-    <div class="metric" style="border:0.5px solid rgba(240,176,96,.3)"><div class="ml">⏳ Do opłacenia</div><div class="mv warn">${fmt(all.uO)}</div></div>
-  </div>`;
+  document.getElementById('ledger-metrics').innerHTML='<div class="metrics">'
+    +'<div class="metric"><div class="ml">Przychody brutto</div><div class="mv">'+fmt(all.gI)+'</div></div>'
+    +'<div class="metric"><div class="ml">Koszty brutto</div><div class="mv">'+fmt(all.gO)+'</div></div>'
+    +'<div class="metric"><div class="ml">Wynik netto</div><div class="mv '+(all.bal>=0?'pos':'neg')+'">'+fmt(all.bal)+'</div></div>'
+    +'<div class="metric"><div class="ml">VAT do zapłaty</div><div class="mv '+(all.vatDue>0?'warn':all.vatDue<0?'pos':'')+'">'+fmt(all.vatDue)+'</div></div>'
+    +'<div class="metric" style="border:0.5px solid rgba(96,200,144,.3)"><div class="ml">✓ Koszty opłacone</div><div class="mv pos">'+fmt(all.pO)+'</div></div>'
+    +'<div class="metric" style="border:0.5px solid rgba(240,176,96,.3)"><div class="ml">⏳ Do opłacenia</div><div class="mv warn">'+fmt(all.uO)+'</div></div>'
+    +'</div>';
 
   const prefix=selYear+(selMonth?'-'+selMonth:'');
-  const filtered=invs.filter(i=>(selCo==='all'||i.company===selCo)&&(!selYear||(i.date&&i.date.startsWith(prefix)))).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const filtered=invs.filter(i=>(selCo==='all'||i.company===selCo)&&(!selYear||(i.date&&i.date.startsWith(prefix))));
 
   if(!filtered.length){document.getElementById('ledger-table').innerHTML='<div class="empty">Brak faktur w wybranym okresie</div>';return;}
 
-  // Split into sales and costs, unpaid first
-  const sales = filtered.filter(i=>i.type==='sale').sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const costs = filtered.filter(i=>i.type==='buy').sort((a,b)=>{
-    if(!a.paid && b.paid) return -1;
-    if(a.paid && !b.paid) return 1;
+  const sales=filtered.filter(i=>i.type==='sale').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const costs=filtered.filter(i=>i.type==='buy').sort((a,b)=>{
+    if(!a.paid&&b.paid)return -1;
+    if(a.paid&&!b.paid)return 1;
     return new Date(b.date)-new Date(a.date);
   });
 
-  const costIds = costs.map(i=>i.id);
-
-  function makeTable(rows, title, color){
-    if(!rows.length) return `<div class="card" style="border:0.5px solid ${color}20"><div style="color:${color};font-weight:600;font-size:13px;margin-bottom:8px">${title} — brak pozycji</div></div>`;
-    const isCosts = title.includes('KOSZTY');
-    const allPaid = isCosts && rows.every(i=>i.paid);
-    const selectAllChk = isCosts
-      ? `<input type="checkbox" id="chk-all" ${allPaid?'checked':''} title="Zaznacz wszystkie jako opłacone"
-          onchange="markAllPaid(this.checked)"
-          style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent);vertical-align:middle"> Wszystkie`
-      : 'Opłac.';
-    let h=`<div class="card" style="border:0.5px solid ${color}30;padding:0;overflow:hidden">
-      <div style="padding:10px 14px;background:${color}08;border-bottom:0.5px solid ${color}20;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:600;font-size:13px;color:${color}">${title} <span style="font-weight:400;opacity:.7;font-size:12px">(${rows.length})</span></span>
-        ${isCosts?`<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px"><input type="checkbox" id="chk-all" ${allPaid?'checked':''} onchange="markAllPaid(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)"> Zaznacz wszystkie opłacone</label>`:''}
-      </div>
-      <div class="tbl-wrap"><table><thead><tr>
-        <th>Data</th><th>Firma</th><th>Nr / Kontrahent</th>
-        <th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th>
-        <th style="text-align:right">Brutto</th><th style="text-align:center">Opłac.</th><th></th>
-      </tr></thead><tbody>`;
-    rows.forEach(i=>{
-      const co=COS.find(x=>x.id===i.company);
-      const unpaid=i.type==='buy'&&!i.paid;
-      h+=`<tr style="${unpaid?'background:rgba(240,176,96,.04)':''}">
-        <td>${i.date||'—'}</td>
-        <td>${co?co.short:'?'}</td>
-        <td style="font-family:var(--font);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          ${unpaid?'<span style="color:var(--amber);font-size:10px;margin-right:4px">●</span>':''}
-          ${i.num?i.num+' · ':''}<span style="opacity:.6">${(i.contractor||i.description||'—').slice(0,45)}</span>
-          ${i.nbpInfo?`<span title="${i.nbpInfo}" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">€</span>`:''}
-        </td>
-        <td style="text-align:right">${fmt(calcN(i.brutto,i.vatRate))}</td>
-        <td style="text-align:right;opacity:.6">${i.vatRate}%</td>
-        <td style="text-align:right;color:var(--accent)">${fmt(i.brutto)}</td>
-        <td style="text-align:center">${i.type==='buy'?`<input type="checkbox" ${i.paid?'checked':''} onchange="togglePaid('${i.id}',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">`:'—'}</td>
-        <td><button class="sm danger" onclick="delInv('${i.id}')">✕</button></td>
-      </tr>`;
-    });
-    h+=`</tbody></table></div></div>`;
-    return h;
-  }
-
-  let h=makeTable(sales,'📈 PRZYCHODY','#60c890')+'<div style="margin-top:16px"></div>'+makeTable(costs,'📉 KOSZTY','#f06060');
-  document.getElementById('ledger-table').innerHTML=h;
+  document.getElementById('ledger-table').innerHTML=
+    makeTable(sales,'📈 PRZYCHODY','#60c890')
+    +'<div style="margin-top:16px"></div>'
+    +makeTable(costs,'📉 KOSZTY','#f06060');
 }
 
 // FIRMS

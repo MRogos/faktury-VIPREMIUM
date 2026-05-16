@@ -413,29 +413,59 @@ function renderLedger(){
 
 function buildTable(rows, title, color, isCosts){
   if(!rows.length) return '<div class="tsec"><div class="tsec-hd"><span style="color:'+color+';font-weight:600;font-size:13px">'+title+' <span style="font-weight:400;opacity:.6;font-size:12px">(0)</span></span></div><div class="empty" style="padding:1.5rem">Brak pozycji</div></div>';
+  
+  var ids = rows.map(function(i){return i.id;});
+  var allSel = ids.length > 0 && ids.every(function(id){return sel[id];});
+  var selIds = ids.filter(function(id){return sel[id];});
   var allPaid = isCosts && rows.every(function(i){return i.paid;});
-  var chkAll = isCosts ? '<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px"><input type="checkbox" '+(allPaid?'checked':'')+' onchange="markAll(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)"> Zaznacz wszystkie opłacone</label>' : '';
+
   var h = '<div class="tsec">';
-  h += '<div class="tsec-hd"><span style="color:'+color+';font-weight:600;font-size:13px">'+title+' <span style="font-weight:400;opacity:.6;font-size:12px">('+rows.length+')</span></span>'+chkAll+'</div>';
+  
+  // Header
+  h += '<div class="tsec-hd">';
+  h += '<span style="color:'+color+';font-weight:600;font-size:13px">'+title+' <span style="font-weight:400;opacity:.6;font-size:12px">('+rows.length+')</span></span>';
+  h += '<div style="display:flex;align-items:center;gap:10px">';
+  if(isCosts) h += '<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px"><input type="checkbox" '+(allPaid?'checked':'')+' onchange="markAll(this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:var(--accent)"> Opłacone: wszystkie</label>';
+  h += '</div></div>';
+
+  // Action bar when something selected
+  if(selIds.length > 0){
+    h += '<div style="background:rgba(240,96,96,.08);border-bottom:0.5px solid rgba(240,96,96,.2);padding:8px 14px;display:flex;align-items:center;gap:10px;font-size:13px">';
+    h += '<span style="color:var(--red);font-weight:600">Zaznaczono: '+selIds.length+'</span>';
+    if(isCosts) h += '<button class="sm prim" onclick="markSelPaid()">&#10003; Oznacz opłacone</button>';
+    h += '<button class="sm del" onclick="delSel()">&#128465; Usuń zaznaczone ('+selIds.length+')</button>';
+    h += '<button class="sm" onclick="clearSel()">&#10005; Odznacz</button>';
+    h += '</div>';
+  }
+
+  // Table
   h += '<div class="tw"><table><thead><tr>';
-  h += '<th>Data</th><th>Firma</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Op&#322;ac.</th><th></th>';
+  h += '<th style="width:32px;text-align:center"><input type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+JSON.stringify(ids)+')" style="width:14px;height:14px;cursor:pointer;accent-color:var(--accent)" title="Zaznacz wszystkie"></th>';
+  h += '<th>Data</th><th>Firma</th><th>Nr / Kontrahent</th>';
+  h += '<th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th>';
+  h += '<th style="text-align:center">Op&#322;ac.</th><th style="text-align:center">&#128465;</th>';
   h += '</tr></thead><tbody>';
+
   rows.forEach(function(i){
     var co = COS.find(function(x){return x.id===i.company;});
     var unpaid = i.type==='buy' && !i.paid;
+    var isSel = !!sel[i.id];
     var nbpIcon = i.nbpInfo ? '<span title="'+i.nbpInfo+'" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">&#8364;</span>' : '';
     var dot = unpaid ? '<span style="color:var(--amber);font-size:10px;margin-right:4px">&#9679;</span>' : '';
-    h += '<tr style="'+(unpaid?'background:rgba(240,176,96,.04)':'')+'">';
+    var rowBg = isSel ? 'background:rgba(240,96,96,.08)' : (unpaid ? 'background:rgba(240,176,96,.04)' : '');
+    h += '<tr style="'+rowBg+'">';
+    h += '<td style="text-align:center"><input type="checkbox" '+(isSel?'checked':'')+' onchange="toggleSel(''+i.id+'',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:var(--red)"></td>';
     h += '<td>'+(i.date||'&#8212;')+'</td>';
     h += '<td>'+(co?co.short:'?')+'</td>';
-    h += '<td style="font-family:var(--font);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+dot+(i.num?i.num+' &middot; ':'')+'<span style="opacity:.6">'+(i.contractor||i.description||'&#8212;').slice(0,45)+'</span>'+nbpIcon+'</td>';
+    h += '<td style="font-family:var(--font);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+dot+(i.num?i.num+' &middot; ':'')+'<span style="opacity:.6">'+(i.contractor||i.description||'&#8212;').slice(0,40)+'</span>'+nbpIcon+'</td>';
     h += '<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
     h += '<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
     h += '<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
-    h += '<td style="text-align:center">'+(i.type==='buy'?'<input type="checkbox" '+(i.paid?'checked':'')+' onchange="togglePaid(\''+i.id+'\',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">':'&#8212;')+'</td>';
-    h += '<td><button class="sm del" onclick="delInv(\''+i.id+'\')">&#10005;</button></td>';
+    h += '<td style="text-align:center">'+(i.type==='buy'?'<input type="checkbox" '+(i.paid?'checked':'')+' onchange="togglePaid(''+i.id+'',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:var(--accent)">':'&#8212;')+'</td>';
+    h += '<td style="text-align:center"><button class="sm del" onclick="delInv(''+i.id+'')">&#10005;</button></td>';
     h += '</tr>';
   });
+
   h += '</tbody></table></div></div>';
   return h;
 }
@@ -771,16 +801,20 @@ function toggleSel(id, checked){
   if(checked) sel[id]=true; else delete sel[id];
   renderLedger();
 }
-function markSelPaid(paid){
+function clearSel(){
+  sel={};
+  renderLedger();
+}
+function markSelPaid(){
   var ids = Object.keys(sel);
   if(!ids.length) return;
   var p = Promise.resolve();
   ids.forEach(function(id){
     var i = invs.find(function(x){return x.id===id;});
-    if(i && i.type==='buy'){
+    if(i && i.type==='buy' && !i.paid){
       p = p.then(function(){
-        return fetch('/api/invoices/'+id+'/paid',{method:'PATCH',headers:ah(),body:JSON.stringify({paid:paid})})
-        .then(function(){i.paid=paid;});
+        return fetch('/api/invoices/'+id+'/paid',{method:'PATCH',headers:ah(),body:JSON.stringify({paid:true})})
+        .then(function(){i.paid=true;});
       });
     }
   });
@@ -789,12 +823,12 @@ function markSelPaid(paid){
 function delSel(){
   var ids = Object.keys(sel);
   if(!ids.length) return;
-  if(!confirm('Usunąć '+ids.length+' faktur?')) return;
+  if(!confirm('Usunąć '+ids.length+' faktur? Operacji nie można cofnąć.')) return;
   var p = Promise.resolve();
   ids.forEach(function(id){
     p = p.then(function(){
       return fetch('/api/invoices/'+id,{method:'DELETE',headers:{'x-auth-token':tok()}})
-      .then(function(){invs=invs.filter(function(i){return i.id!==id;});});
+      .then(function(){ invs=invs.filter(function(i){return i.id!==id;}); });
     });
   });
   p.then(function(){sel={};renderTree();renderCur();});

@@ -295,7 +295,8 @@ const COS = [
   { id: 'vr', name: 'Vipremium Marcin Rogowski', short: 'VMR' },
 ];
 const VATS = [0, 5, 8, 23];
-let invs = JSON.parse(localStorage.getItem('vip_invs') || '[]');
+
+let invs = [];
 let pending = null;
 let expanded = { vt: true, pt: true, et: true, vr: true };
 let currentTab = 'scan';
@@ -309,8 +310,8 @@ function getKey() {
   return document.getElementById('api-key').value || localStorage.getItem('vip_api_key') || '';
 }
 
-function saveInvs() {
-  localStorage.setItem('vip_invs', JSON.stringify(invs));
+async function saveInvs_old() {
+
 }
 
 const fmt = n => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(+n || 0);
@@ -625,19 +626,23 @@ function refreshForm() {
   renderForm();
 }
 
-function saveInv() {
+async function saveInv() {
   if (!pending || !pending.brutto || pending.brutto <= 0) { alert('Podaj kwotę brutto!'); return; }
-  invs.push({
+  const inv = {
     ...pending,
-    // Zapisujemy info o kursie dla celów księgowych
     nbpInfo: pending.currency !== 'PLN'
       ? `${pending.bruttoOrig?.toFixed(2)} ${pending.currency} × ${pending.nbpRate?.toFixed(4)} PLN (NBP ${pending.nbpDate})`
       : null
-  });
-  saveInvs();
-  pending = null;
-  renderForm();
-  setStatus('ok', 'Faktura zaksięgowana! Możesz wrzucić kolejną.');
+  };
+  try {
+    await fetch('/api/invoices', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(inv) });
+    invs.push(inv);
+    pending = null;
+    renderForm();
+    setStatus('ok', 'Faktura zaksięgowana! Możesz wrzucić kolejną.');
+  } catch(e) {
+    setStatus('err', 'Błąd zapisu: ' + e.message);
+  }
 }
 
 function handleFile(file) { if (file) processFile(file); }
@@ -757,16 +762,23 @@ function renderFirms() {
   document.getElementById('firms-content').innerHTML = h;
 }
 
-function delInv(id) {
+async function delInv(id) {
   if (!confirm('Usunąć fakturę?')) return;
+  await fetch('/api/invoices/' + id, { method: 'DELETE' });
   invs = invs.filter(i => i.id !== id);
-  saveInvs();
   if (currentTab === 'ledger') renderLedger();
   if (currentTab === 'firms') renderFirms();
 }
 
 /* Init */
-window.onload = () => { const k = localStorage.getItem('vip_api_key'); if (k && k.startsWith('sk-ant')) { document.getElementById('api-key').value = k; document.getElementById('key-status').textContent = '✓ zapisany'; } else { localStorage.clear(); } };
+window.onload = async () => {
+  try {
+    const r = await fetch('/api/invoices');
+    invs = await r.json();
+  } catch(e) { console.error('Błąd ładowania faktur:', e); }
+  if (currentTab === 'ledger') renderLedger();
+  if (currentTab === 'firms') renderFirms();
+};
 </script>
 </body>
 </html>

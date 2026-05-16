@@ -326,6 +326,43 @@ tr:hover td { background: rgba(255,255,255,.02); }
       <div id="form-area"></div>
     </div>
 
+    <div id="page-import" style="display:none">
+      <h1>Import XLSX</h1>
+      <p class="page-sub">Wrzuć plik z KSeF — system zaimportuje wszystkie faktury naraz</p>
+      <div id="import-status"></div>
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-weight:500;margin-bottom:12px;font-size:13px">1. Wybierz firmę dla importowanych faktur</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="fg"><label>Firma</label>
+            <select id="import-company">
+              <option value="vt">VT Ltd — VIPREMIUM TRANSPORT LTD</option>
+              <option value="pt">PT&L — Premium Transport & Logistic</option>
+              <option value="et">ET&VG — Elite Tax & Van Group</option>
+              <option value="vr">VMR — Vipremium Marcin Rogowski</option>
+            </select>
+          </div>
+          <div class="fg"><label>Typ faktur</label>
+            <select id="import-type">
+              <option value="buy">Zakupy (koszty)</option>
+              <option value="sale">Sprzedaż (przychody)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-weight:500;margin-bottom:12px;font-size:13px">2. Wrzuć plik XLSX z KSeF</div>
+        <div class="drop" id="import-dz" onclick="document.getElementById('import-fi').click()"
+          ondragover="event.preventDefault();this.classList.add('ov')"
+          ondragleave="this.classList.remove('ov')"
+          ondrop="this.classList.remove('ov');handleImportDrop(event)">
+          <i style="font-size:28px;display:block;margin-bottom:8px">📊</i>
+          <b>Wrzuć plik XLSX tutaj</b>
+          <p style="font-size:12px;color:var(--muted);margin-top:4px">Eksport z KSeF / zestawienie zakupów</p>
+        </div>
+        <input type="file" id="import-fi" accept=".xlsx,.xls" onchange="handleImportFile(this.files[0])">
+      </div>
+      <div id="import-preview"></div>
+    </div>
     <div id="page-ledger" style="display:none">
       <h1>Księga</h1>
       <p class="page-sub">Wszystkie faktury wszystkich firm</p>
@@ -717,7 +754,7 @@ function handleDrop(e) { e.preventDefault(); const f = e.dataTransfer.files[0]; 
 /* Tab switching */
 function setTab(t) {
   currentTab = t;
-  ['scan', 'ledger', 'firms'].forEach(id => {
+  ['scan', 'import', 'ledger', 'firms'].forEach(id => {
     document.getElementById('page-' + id).style.display = id === t ? '' : 'none';
     document.getElementById('nav-' + id).classList.toggle('on', id === t);
   });
@@ -942,7 +979,7 @@ function setMonth(coId, y, m) {
   expandedCompany = coId;
   expandedYears[coId + '_' + y] = true;
   currentTab = 'firms';
-  ['scan','ledger','firms'].forEach(id => {
+  ['scan','import','ledger','firms'].forEach(id => {
     document.getElementById('page-' + id).style.display = id==='firms' ? '' : 'none';
     document.getElementById('nav-' + id).classList.toggle('on', id==='firms');
   });
@@ -997,6 +1034,153 @@ function checkLogin() {
   });
 }
 
+// ===== IMPORT XLSX =====
+function handleImportDrop(e) { e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) handleImportFile(f); }
+
+async function handleImportFile(file) {
+  const status = document.getElementById('import-status');
+  status.innerHTML = '<div class="msg info"><span class="spin">↻</span> Czytam plik...</div>';
+  document.getElementById('import-preview').innerHTML = '';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+  if (!rows.length) { status.innerHTML = '<div class="msg err">Plik jest pusty lub ma nieoczekiwany format.</div>'; return; }
+
+  const sample = rows[0];
+  const keys = Object.keys(sample);
+
+  function findCol(...patterns) {
+    return keys.find(k => patterns.some(p => k.toLowerCase().replace(/\s/g,'').includes(p.toLowerCase().replace(/\s/g,'')))) || null;
+  }
+
+  // Detect format: sprzedaż (BoxTMS) or zakupy (KSeF)
+  const isSale = keys.some(k => k.toLowerCase().includes('zapłacono') || k.toLowerCase().includes('kurs') || k.toLowerCase().includes('nr. zlecenia'));
+
+  const colNum    = findCol('Numer FV','nr fv','numer faktury');
+  const colDate   = findCol('Wystawiono','data wystawienia','data');
+  const colCont   = findCol('Kontrahent','nazwa kontrahenta','kontrahent');
+  const colNetto  = findCol('Netto');
+  const colVatPLN = findCol('Vat PLN','VAT PLN','vat pln');
+  const colBrutto = findCol('Brutto');
+  const colCurr   = findCol('Waluta');
+  const colKurs   = findCol('Kurs');
+  const colZapl   = findCol('Zapłacono');
+  const colPozost = findCol('Pozostało');
+  const colNrZlec = findCol('Nr. zlecenia','nr zlecenia');
+
+  const company = document.getElementById('import-company').value;
+  const type    = document.getElementById('import-type').value;
+
+  const parsed = rows.map((r, idx) => {
+    const rawDate = colDate ? r[colDate] : '';
+    let dateStr = '';
+    if (rawDate instanceof Date) {
+      dateStr = rawDate.toISOString().slice(0,10);
+    } else if (typeof rawDate === 'string' && rawDate.length >= 10) {
+      dateStr = rawDate.slice(0,10);
+    }
+
+    const brutto  = parseFloat(String(r[colBrutto]||'').replace(',','.')) || 0;
+    const netto   = parseFloat(String(r[colNetto]||'').replace(',','.')) || 0;
+    const vatPLN  = parseFloat(String(r[colVatPLN]||'').replace(',','.')) || 0;
+    const kurs    = colKurs ? (parseFloat(String(r[colKurs]||'').replace(',','.')) || 1) : 1;
+    const curr    = colCurr ? String(r[colCurr]||'PLN').trim() : 'PLN';
+    const zapl    = colZapl ? parseFloat(String(r[colZapl]||'0').replace(',','.')) || 0 : 0;
+    const pozost  = colPozost ? parseFloat(String(r[colPozost]||'0').replace(',','.')) || 0 : 0;
+    const isPaid  = pozost === 0 && brutto > 0;
+    const desc    = colNrZlec ? String(r[colNrZlec]||'').trim() : '';
+
+    // Calculate VAT rate
+    let vatRate = 0;
+    if (vatPLN > 0 && netto > 0) {
+      const calcRate = Math.round((vatPLN / netto) * 100);
+      vatRate = [0,5,8,23].includes(calcRate) ? calcRate : 23;
+    } else if (brutto > 0 && netto > 0 && curr === 'PLN') {
+      const calcRate = Math.round(((brutto/netto) - 1) * 100);
+      vatRate = [0,5,8,23].includes(calcRate) ? calcRate : 0;
+    }
+
+    // For EUR invoices - brutto in PLN = brutto_EUR * kurs
+    let bruttoPLN = brutto;
+    let bruttoOrig = null;
+    let nbpRate = null;
+    let nbpInfo = null;
+    if (curr !== 'PLN' && kurs > 1) {
+      bruttoOrig = brutto;
+      bruttoPLN = Math.round(brutto * kurs * 100) / 100;
+      nbpRate = kurs;
+      nbpInfo = bruttoOrig.toFixed(2) + ' ' + curr + ' × ' + kurs.toFixed(4) + ' = ' + bruttoPLN.toFixed(2) + ' PLN (kurs z FV)';
+    }
+
+    return {
+      id: 'xlsx_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).slice(2,5),
+      company, type,
+      num: String(r[colNum]||'').trim(),
+      date: dateStr,
+      contractor: String(r[colCont]||'').trim(),
+      buyer: '',
+      description: desc,
+      brutto: bruttoPLN,
+      bruttoOrig,
+      vatRate,
+      currency: curr,
+      nbpRate,
+      nbpDate: dateStr,
+      nbpTable: 'z faktury',
+      nbpInfo,
+      confidence: 'high',
+      paid: isPaid,
+    };
+  }).filter(r => r.brutto > 0);
+
+  const paidCount = parsed.filter(r => r.paid).length;
+  const eurCount  = parsed.filter(r => r.currency !== 'PLN').length;
+  status.innerHTML = '<div class="msg ok">✓ Odczytano ' + parsed.length + ' faktur' +
+    (eurCount ? ' (w tym ' + eurCount + ' walutowych z kursem z FV)' : '') +
+    (paidCount ? ' · ' + paidCount + ' opłaconych' : '') + '</div>';
+
+  const fmt2 = n => new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(+n||0);
+  let html = '<div class="card"><div style="font-weight:500;margin-bottom:12px">Podgląd — pierwsze 10 z ' + parsed.length + '</div>';
+  html += '<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Numer</th><th>Kontrahent</th><th>Waluta</th><th style="text-align:right">Brutto PLN</th><th style="text-align:center">Opłac.</th></tr></thead><tbody>';
+  parsed.slice(0,10).forEach(r => {
+    const currInfo = r.currency !== 'PLN' ? '<span style="font-size:10px;color:var(--amber)"> (' + (r.bruttoOrig||'').toFixed(2) + ' ' + r.currency + ')</span>' : '';
+    html += '<tr><td>' + r.date + '</td><td style="font-size:11px">' + (r.num||'—') + '</td>' +
+      '<td style="font-size:11px">' + (r.contractor||'—').slice(0,30) + '</td>' +
+      '<td style="font-size:11px">' + r.currency + '</td>' +
+      '<td style="text-align:right;font-weight:500">' + fmt2(r.brutto) + currInfo + '</td>' +
+      '<td style="text-align:center">' + (r.paid ? '✓' : '—') + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  if (parsed.length > 10) html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">...i jeszcze ' + (parsed.length-10) + ' faktur</div>';
+  const safeJson = JSON.stringify(parsed).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  html += '<div style="margin-top:14px;display:flex;gap:10px">' +
+    '<button class="prim" onclick="confirmImport(importParsed)">✓ Importuj wszystkie (' + parsed.length + ')</button>' +
+    '<button onclick="document.getElementById(\'import-preview\').innerHTML=\'\';document.getElementById(\'import-status\').innerHTML=\'\'">Anuluj</button>' +
+    '</div></div>';
+  window.importParsed = parsed;
+  document.getElementById('import-preview').innerHTML = html;
+}
+
+async function confirmImport(rows) {
+  const status = document.getElementById('import-status');
+  status.innerHTML = '<div class="msg info"><span class="spin">↻</span> Importuję ' + rows.length + ' faktur...</div>';
+  let ok = 0, err = 0;
+  for (const inv of rows) {
+    try {
+      await fetch('/api/invoices', { method:'POST', headers: authHeaders(), body: JSON.stringify(inv) });
+      invs.push(inv);
+      ok++;
+    } catch(e) { err++; }
+  }
+  renderYearFolders();
+  status.innerHTML = '<div class="msg ok">✓ Zaimportowano ' + ok + ' faktur!' + (err?' Błędy: '+err:'') + '</div>';
+  document.getElementById('import-preview').innerHTML = '';
+}
+// ===== END IMPORT =====
+
 window.onload = () => {
   if (sessionStorage.getItem('vip_auth') === '1') {
     document.getElementById('login-screen').style.display = 'none';
@@ -1005,5 +1189,6 @@ window.onload = () => {
   }
 };
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>

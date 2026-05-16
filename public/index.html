@@ -357,9 +357,9 @@ tr:hover td { background: rgba(255,255,255,.02); }
           ondrop="this.classList.remove('ov');handleImportDrop(event)">
           <i style="font-size:28px;display:block;margin-bottom:8px">📊</i>
           <b>Wrzuć plik XLSX tutaj</b>
-          <p style="font-size:12px;color:var(--muted);margin-top:4px">Eksport z KSeF / zestawienie zakupów</p>
+          <p style="font-size:12px;color:var(--muted);margin-top:4px">Eksport z KSeF / zestawienie z BoxTMS (XLSX lub PDF)</p>
         </div>
-        <input type="file" id="import-fi" accept=".xlsx,.xls" onchange="handleImportFile(this.files[0])">
+        <input type="file" id="import-fi" accept=".xlsx,.xls,.pdf" onchange="handleImportFile(this.files[0])">
       </div>
       <div id="import-preview"></div>
     </div>
@@ -786,11 +786,18 @@ function renderLedger() {
     (!selectedYear || (i.date && i.date.startsWith(prefix2)))
   );
   const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (sorted.length === 0) {
+    h += '<div class="empty">Brak faktur w wybranym okresie</div>';
+    document.getElementById('ledger-content').innerHTML = h;
+    try { const h1=document.querySelector('#page-ledger h1'); if(h1){const MNL=['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];const lbl=selectedMonth?MNL[parseInt(selectedMonth)-1]+' '+selectedYear:selectedYear;h1.innerHTML='Księga <span style="color:var(--accent);font-size:16px">'+lbl+'</span>';}} catch(e){}
+    return;
+  }
   h += `<div class="tbl-wrap"><table>
     <thead><tr>
       <th>Data</th><th>Firma</th><th>Typ</th><th>Nr / Kontrahent</th>
       <th style="text-align:right">Netto</th><th style="text-align:right">VAT</th>
-      <th style="text-align:right">Brutto</th><th></th>
+      <th style="text-align:right">Brutto</th>
+      <th style="text-align:center">Opłac.</th><th></th>
     </tr></thead><tbody>`;
   sorted.forEach(i => {
     const co = COS.find(x => x.id === i.company);
@@ -851,7 +858,8 @@ function renderFirms() {
           <div class="vat-row"><span>VAT do zapłaty (JPK)</span><span style="color:${s.vatDue > 0 ? 'var(--amber)' : s.vatDue < 0 ? 'var(--green)' : 'inherit'}">${fmt(s.vatDue)}</span></div>
         </div>`;
 
-      const fi = invs.filter(i => i.company === c.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+      const prefix3 = selectedYear + (selectedMonth ? '-' + selectedMonth : '');
+      const fi = invs.filter(i => i.company === c.id && (!selectedYear || (i.date && i.date.startsWith(prefix3)))).sort((a, b) => new Date(b.date) - new Date(a.date));
       if (fi.length > 0) {
         h += `<div style="margin-top:14px"><div class="tbl-wrap"><table>
           <thead><tr>
@@ -1042,6 +1050,12 @@ async function handleImportFile(file) {
   status.innerHTML = '<div class="msg info"><span class="spin">↻</span> Czytam plik...</div>';
   document.getElementById('import-preview').innerHTML = '';
 
+  // Handle PDF - use AI to extract invoices
+  if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+    await handleImportPDF(file);
+    return;
+  }
+
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -1157,27 +1171,117 @@ async function handleImportFile(file) {
   if (parsed.length > 10) html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">...i jeszcze ' + (parsed.length-10) + ' faktur</div>';
   const safeJson = JSON.stringify(parsed).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   html += '<div style="margin-top:14px;display:flex;gap:10px">' +
-    '<button class="prim" onclick="confirmImport(importParsed)">✓ Importuj wszystkie (' + parsed.length + ')</button>' +
+    '<button class="prim" onclick="confirmImport(window.importParsed)">✓ Importuj wszystkie (' + parsed.length + ')</button>' +
     '<button onclick="document.getElementById(\'import-preview\').innerHTML=\'\';document.getElementById(\'import-status\').innerHTML=\'\'">Anuluj</button>' +
     '</div></div>';
   window.importParsed = parsed;
   document.getElementById('import-preview').innerHTML = html;
 }
 
-async function confirmImport(rows) {
+async function handleImportPDF(file) {
   const status = document.getElementById('import-status');
-  status.innerHTML = '<div class="msg info"><span class="spin">↻</span> Importuję ' + rows.length + ' faktur...</div>';
+  const company = document.getElementById('import-company').value;
+  const type = document.getElementById('import-type').value;
+
+  try {
+    // Convert PDF to base64
+    const b64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+
+    status.innerHTML = '<div class="msg info"><span class="spin">↻</span> AI odczytuje faktury z PDF...</div>';
+
+    const sys = `Jesteś systemem do odczytu zestawień faktur z PDF. Zwróć TYLKO JSON array bez markdown:
+[{"num":"numer faktury","date":"YYYY-MM-DD","contractor":"nazwa kontrahenta","netto":liczba,"vat":liczba,"brutto":liczba,"currency":"PLN lub EUR"}]
+Każda faktura to osobny obiekt. Odczytaj WSZYSTKIE faktury z dokumentu. Data: użyj daty z kolumny "Z dnia" lub "Wystawiono". Tylko JSON array.`;
+
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4000,
+        system: sys,
+        messages: [{ role: 'user', content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
+          { type: 'text', text: 'Odczytaj wszystkie faktury z tego zestawienia i zwróć JSON array.' }
+        ]}]
+      })
+    });
+
+    if (!resp.ok) throw new Error('Błąd API ' + resp.status);
+    const data = await resp.json();
+    if (!data.content) throw new Error(data.error || 'Brak odpowiedzi');
+
+    const txt = data.content.map(x => x.text || '').join('').replace(/```json|```/g, '').trim();
+    const rows = JSON.parse(txt);
+
+    if (!Array.isArray(rows) || !rows.length) throw new Error('AI nie odczytało żadnych faktur');
+
+    const parsed = rows.map((r, idx) => {
+      const brutto = parseFloat(r.brutto) || 0;
+      const netto = parseFloat(r.netto) || 0;
+      let vatRate = 0;
+      if (brutto > 0 && netto > 0) {
+        const calc = Math.round(((brutto / netto) - 1) * 100);
+        vatRate = [0,5,8,23].includes(calc) ? calc : 0;
+      }
+      return {
+        id: 'pdf_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).slice(2,5),
+        company, type,
+        num: String(r.num || '').trim(),
+        date: String(r.date || '').slice(0,10),
+        contractor: String(r.contractor || '').trim(),
+        buyer: '', description: '',
+        brutto, bruttoOrig: null, vatRate,
+        currency: String(r.currency || 'PLN').trim(),
+        nbpRate: null, nbpDate: null, nbpTable: null, nbpInfo: null,
+        confidence: 'medium', paid: false,
+      };
+    }).filter(r => r.brutto > 0);
+
+    status.innerHTML = '<div class="msg ok">✓ AI odczytało ' + parsed.length + ' faktur z PDF</div>';
+
+    const fmt2 = n => new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(+n||0);
+    let html = '<div class="card"><div style="font-weight:500;margin-bottom:12px">Podgląd — ' + parsed.length + ' faktur z PDF</div>';
+    html += '<div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Numer</th><th>Kontrahent</th><th style="text-align:right">Brutto</th><th>Waluta</th></tr></thead><tbody>';
+    parsed.forEach(r => {
+      html += '<tr><td>' + r.date + '</td><td style="font-size:11px">' + (r.num||'—') + '</td><td style="font-size:11px">' + (r.contractor||'—').slice(0,35) + '</td><td style="text-align:right;font-weight:500">' + fmt2(r.brutto) + '</td><td>' + r.currency + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="margin-top:14px;display:flex;gap:10px">' +
+      '<button class="prim" onclick="confirmImport(window.importParsed)">✓ Importuj wszystkie (' + parsed.length + ')</button>' +
+      '<button onclick="document.getElementById(\'import-preview\').innerHTML=\'\';document.getElementById(\'import-status\').innerHTML=\'\'" >Anuluj</button>' +
+      '</div></div>';
+    window.importParsed = parsed;
+    document.getElementById('import-preview').innerHTML = html;
+
+  } catch(e) {
+    status.innerHTML = '<div class="msg err">✕ Błąd: ' + e.message + '</div>';
+  }
+}
+
+async function confirmImport(rows) {
+  const data = rows || window.importParsed || [];
+  if (!data.length) { alert('Brak danych do importu'); return; }
+  const status = document.getElementById('import-status');
+  status.innerHTML = '<div class="msg info"><span class="spin">↻</span> Importuję ' + data.length + ' faktur...</div>';
   let ok = 0, err = 0;
-  for (const inv of rows) {
+  for (const inv of data) {
     try {
-      await fetch('/api/invoices', { method:'POST', headers: authHeaders(), body: JSON.stringify(inv) });
-      invs.push(inv);
-      ok++;
+      const r = await fetch('/api/invoices', { method:'POST', headers: authHeaders(), body: JSON.stringify(inv) });
+      if (r.ok) { if (!invs.find(x=>x.id===inv.id)) invs.push(inv); ok++; }
+      else err++;
     } catch(e) { err++; }
   }
   renderYearFolders();
-  status.innerHTML = '<div class="msg ok">✓ Zaimportowano ' + ok + ' faktur!' + (err?' Błędy: '+err:'') + '</div>';
+  window.importParsed = [];
+  status.innerHTML = '<div class="msg ok">✓ Zaimportowano ' + ok + ' faktur!' + (err?' Błędów: '+err:'') + '</div>';
   document.getElementById('import-preview').innerHTML = '';
+  document.getElementById('import-fi').value = '';
 }
 // ===== END IMPORT =====
 

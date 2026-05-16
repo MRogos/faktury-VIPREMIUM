@@ -231,10 +231,48 @@ tr:hover td { background: rgba(255,255,255,.02); }
 .conf-h { color: var(--green); font-size: 11px; font-family: var(--mono); }
 .conf-m { color: var(--amber); font-size: 11px; font-family: var(--mono); }
 .conf-l { color: var(--red); font-size: 11px; font-family: var(--mono); }
+
+.login-screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--bg); display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.login-box {
+  background: var(--bg2); border: 0.5px solid var(--border2);
+  border-radius: 16px; padding: 2.5rem 2rem; width: 360px; text-align: center;
+}
+.login-logo { color: var(--accent); font-size: 20px; font-weight: 700; letter-spacing: .05em; margin-bottom: 4px; }
+.login-sub { color: var(--muted); font-size: 12px; margin-bottom: 2rem; font-family: var(--mono); }
+.login-box input {
+  width: 100%; padding: 10px 14px; border-radius: 8px;
+  border: 0.5px solid var(--border2); background: var(--bg3);
+  color: var(--text); font-size: 14px; font-family: var(--font);
+  margin-bottom: 12px; text-align: center; letter-spacing: .1em;
+}
+.login-box input:focus { outline: none; border-color: var(--accent); }
+.login-btn {
+  width: 100%; padding: 10px; background: var(--accent); color: #111;
+  border: none; border-radius: 8px; font-size: 14px; font-weight: 700;
+  cursor: pointer; font-family: var(--font);
+}
+.login-btn:hover { background: var(--accent2); }
+.login-err { color: var(--red); font-size: 12px; margin-top: 8px; font-family: var(--mono); }
+
 </style>
 </head>
 <body>
-<div class="shell">
+
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">VIPREMIUM</div>
+    <div class="login-sub">System Faktur — Panel zamknięty</div>
+    <input type="password" id="login-pass" placeholder="Wpisz hasło dostępu" onkeydown="if(event.key==='Enter')checkLogin()">
+    <button class="login-btn" onclick="checkLogin()">Zaloguj się</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<div class="shell" id="main-app" style="display:none">
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="logo">
@@ -400,6 +438,7 @@ async function processFile(file) {
 Zasady: type=sale gdy faktura wystawiona przez firmę z grupy Vipremium (przychód), type=buy gdy zakup od zewnętrznego dostawcy (koszt). Jeśli czegoś nie możesz odczytać wstaw null. WAŻNE: raw_text max 200 znaków. Tylko JSON — nic więcej.`;
 
     const resp = await fetch('/api/scan', {
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() },
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -635,7 +674,7 @@ async function saveInv() {
       : null
   };
   try {
-    await fetch('/api/invoices', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(inv) });
+    await fetch('/api/invoices', { method: 'POST', headers: authHeaders(), body: JSON.stringify(inv) });
     invs.push(inv);
     pending = null;
     renderForm();
@@ -764,20 +803,56 @@ function renderFirms() {
 
 async function delInv(id) {
   if (!confirm('Usunąć fakturę?')) return;
-  await fetch('/api/invoices/' + id, { method: 'DELETE' });
+  await fetch('/api/invoices/' + id, { method: 'DELETE', headers: {'x-auth-token': getToken()} });
   invs = invs.filter(i => i.id !== id);
   if (currentTab === 'ledger') renderLedger();
   if (currentTab === 'firms') renderFirms();
 }
 
 /* Init */
-window.onload = async () => {
+async function loadApp() {
   try {
-    const r = await fetch('/api/invoices');
+    const r = await fetch('/api/invoices', { headers: {'x-auth-token': getToken()} });
     invs = await r.json();
   } catch(e) { console.error('Błąd ładowania faktur:', e); }
   if (currentTab === 'ledger') renderLedger();
   if (currentTab === 'firms') renderFirms();
+}
+
+function getToken() {
+  return sessionStorage.getItem('vip_pass') || '';
+}
+
+function authHeaders() {
+  return { 'Content-Type': 'application/json', 'x-auth-token': getToken() };
+}
+
+function checkLogin() {
+  const pass = document.getElementById('login-pass').value;
+  fetch('/api/auth', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({password: pass})
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      sessionStorage.setItem('vip_auth', '1');
+      sessionStorage.setItem('vip_pass', pass);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('main-app').style.display = 'flex';
+      loadApp();
+    } else {
+      document.getElementById('login-err').textContent = 'Błędne hasło. Spróbuj ponownie.';
+      document.getElementById('login-pass').value = '';
+    }
+  });
+}
+
+window.onload = () => {
+  if (sessionStorage.getItem('vip_auth') === '1') {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'flex';
+    loadApp();
+  }
 };
 </script>
 </body>

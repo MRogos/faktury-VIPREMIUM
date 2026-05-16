@@ -71,6 +71,9 @@ body {
 .mo-item { display: flex; align-items: center; gap: 8px; padding: 5px 20px 5px 36px; cursor: pointer; font-size: 12px; color: var(--muted); font-family: var(--mono); border-left: 2px solid transparent; transition: all .15s; }
 .mo-item:hover { color: var(--text); background: rgba(255,255,255,.02); }
 .mo-item.on { color: var(--accent); border-left-color: var(--accent); background: rgba(200,240,96,.04); }
+.co-item { display: flex; align-items: center; gap: 8px; padding: 7px 20px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); border-left: 2px solid transparent; transition: all .15s; }
+.co-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.co-item.on { color: var(--accent); border-left-color: var(--accent); background: rgba(200,240,96,.05); }
 .yr-chev { font-size: 10px; transition: transform .2s; display: inline-block; }
 .yr-chev.open { transform: rotate(90deg); }
 .nav-icon { font-size: 15px; }
@@ -298,7 +301,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <div class="nav-item" id="nav-firms" onclick="setTab('firms')">
       <span class="nav-icon">◈</span> Obliczenia firm
     </div>
-    <div class="yr-sec">Rok rozliczeniowy</div>
+    <div class="yr-sec">Nawigacja</div>
     <div id="yr-folders"></div>
   </nav>
 
@@ -351,7 +354,9 @@ let pending = null;
 let expanded = { vt: true, pt: true, et: true, vr: true };
 let currentTab = 'scan';
 let selectedYear = new Date().getFullYear().toString();
-let selectedMonth = null;
+let selectedMonth = (new Date().getMonth()+1).toString().padStart(2,'0');
+let selectedCompany = 'all';
+let expandedCompany = 'all';
 let expandedYears = { [new Date().getFullYear().toString()]: true };
 
 function saveKey(v) {
@@ -375,7 +380,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 function stats(cid) {
   const prefix = selectedYear + (selectedMonth ? '-' + selectedMonth : '');
-  const inv = invs.filter(i => (cid === 'all' || i.company === cid) && (!selectedYear || (i.date && i.date.startsWith(prefix))));
+  const inv = invs.filter(i => {
+    const matchCo = cid === 'all' ? (selectedCompany === 'all' || i.company === selectedCompany) : i.company === cid;
+    const matchDate = !selectedYear || (i.date && i.date.startsWith(prefix));
+    return matchCo && matchDate;
+  });
   const s = inv.filter(i => i.type === 'sale');
   const b = inv.filter(i => i.type === 'buy');
   const gI = s.reduce((a, i) => a + i.brutto, 0);
@@ -734,7 +743,12 @@ function renderLedger() {
     return;
   }
 
-  const sorted = [...invs].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const prefix2 = selectedYear + (selectedMonth ? '-' + selectedMonth : '');
+  const filtered = invs.filter(i =>
+    (selectedCompany === 'all' || i.company === selectedCompany) &&
+    (!selectedYear || (i.date && i.date.startsWith(prefix2)))
+  );
+  const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
   h += `<div class="tbl-wrap"><table>
     <thead><tr>
       <th>Data</th><th>Firma</th><th>Typ</th><th>Nr / Kontrahent</th>
@@ -766,7 +780,8 @@ function renderLedger() {
 /* Firms */
 function renderFirms() {
   let h = '';
-  COS.forEach(c => {
+  const cosToShow = selectedCompany === 'all' ? COS : COS.filter(c => c.id === selectedCompany);
+  cosToShow.forEach(c => {
     const s = stats(c.id);
     const plus = s.bal >= 0;
     const ex = expanded[c.id];
@@ -850,55 +865,86 @@ async function delInv(id) {
 /* Init */
 const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12'];
 const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+const CO_LIST = [
+  {id:'all', name:'Wszystkie firmy', icon:'🏢'},
+  {id:'vt',  name:'VT Ltd',         icon:'🚛'},
+  {id:'pt',  name:'PT&L',           icon:'🚐'},
+  {id:'et',  name:'ET&VG',          icon:'🚗'},
+  {id:'vr',  name:'VMR Warsztat',   icon:'🔧'},
+];
 
 function renderYearFolders() {
   const el = document.getElementById('yr-folders');
   if (!el) return;
-  const years = ['2025', '2026', '2027'];
   let html = '';
-  years.forEach(y => {
-    const yCnt = invs.filter(i => i.date && i.date.startsWith(y)).length;
-    const isExp = expandedYears[y];
-    const isSelYear = selectedYear === y && !selectedMonth;
-    html += '<div class="yr-item ' + (isSelYear?'on':'') + '" onclick="toggleYear(\'' + y + '\')">' +
-      '<span class="yr-chev ' + (isExp?'open':'') + '">▶</span>' +
-      '<span>📁</span> ' + y +
-      '<span class="yr-cnt">' + yCnt + '</span></div>';
-    if (isExp) {
-      MONTHS.forEach((m, idx) => {
-        const prefix = y + '-' + m;
-        const mCnt = invs.filter(i => i.date && i.date.startsWith(prefix)).length;
-        if (mCnt === 0 && selectedYear !== y) return;
-        const isSel = selectedYear === y && selectedMonth === m;
-        html += '<div class="mo-item ' + (isSel?'on':'') + '" onclick="setMonth(\'' + y + '\',\'' + m + '\')">' +
-          '📄 ' + MONTH_NAMES[idx] +
-          '<span class="yr-cnt">' + mCnt + '</span></div>';
+
+  CO_LIST.forEach(co => {
+    const isExpCo = expandedCompany === co.id;
+    const isSelCo = selectedCompany === co.id;
+    const coCnt = invs.filter(i => co.id === 'all' || i.company === co.id).length;
+    html += '<div class="co-item ' + (isSelCo && !isExpCo ? 'on' : '') + '" onclick="toggleCompany(\'' + co.id + '\')">' +
+      '<span class="yr-chev ' + (isExpCo?'open':'') + '">▶</span>' +
+      co.icon + ' ' + co.name +
+      '<span class="yr-cnt">' + coCnt + '</span></div>';
+
+    if (isExpCo) {
+      const years = ['2025','2026','2027'];
+      years.forEach(y => {
+        const yCnt = invs.filter(i => i.date && i.date.startsWith(y) && (co.id==='all'||i.company===co.id)).length;
+        const isExpY = expandedYears[co.id + '_' + y];
+        const isSelY = selectedCompany===co.id && selectedYear===y && !selectedMonth;
+        html += '<div class="yr-item ' + (isSelY?'on':'') + '" style="padding-left:32px" onclick="toggleYear(\'' + co.id + '\',\'' + y + '\')">' +
+          '<span class="yr-chev ' + (isExpY?'open':'') + '">▶</span>' +
+          '📁 ' + y + '<span class="yr-cnt">' + yCnt + '</span></div>';
+
+        if (isExpY) {
+          MONTHS.forEach((m, idx) => {
+            const prefix = y + '-' + m;
+            const mCnt = invs.filter(i => i.date && i.date.startsWith(prefix) && (co.id==='all'||i.company===co.id)).length;
+            if (mCnt === 0) return;
+            const isSel = selectedCompany===co.id && selectedYear===y && selectedMonth===m;
+            html += '<div class="mo-item ' + (isSel?'on':'') + '" onclick="setMonth(\'' + co.id + '\',\'' + y + '\',\'' + m + '\')">' +
+              '📄 ' + MONTH_NAMES[idx] + '<span class="yr-cnt">' + mCnt + '</span></div>';
+          });
+        }
       });
     }
   });
+
   el.innerHTML = html;
 }
 
-function toggleYear(y) {
-  expandedYears[y] = !expandedYears[y];
-  if (expandedYears[y]) {
-    selectedYear = y;
-    selectedMonth = null;
-  }
+function toggleCompany(coId) {
+  expandedCompany = expandedCompany === coId ? null : coId;
+  selectedCompany = coId;
+  selectedMonth = null;
   renderYearFolders();
   if (currentTab === 'ledger') renderLedger();
   if (currentTab === 'firms') renderFirms();
 }
 
-function setMonth(y, m) {
+function toggleYear(coId, y) {
+  const key = coId + '_' + y;
+  expandedYears[key] = !expandedYears[key];
+  selectedCompany = coId;
+  selectedYear = y;
+  selectedMonth = null;
+  expandedCompany = coId;
+  renderYearFolders();
+  if (currentTab === 'ledger') renderLedger();
+  if (currentTab === 'firms') renderFirms();
+}
+
+function setMonth(coId, y, m) {
+  selectedCompany = coId;
   selectedYear = y;
   selectedMonth = m;
-  expandedYears[y] = true;
-  // Automatycznie przełącz na Obliczenia firm
+  expandedCompany = coId;
+  expandedYears[coId + '_' + y] = true;
   currentTab = 'firms';
-  ['scan', 'ledger', 'firms'].forEach(id => {
-    document.getElementById('page-' + id).style.display = id === 'firms' ? '' : 'none';
-    document.getElementById('nav-' + id).classList.toggle('on', id === 'firms');
+  ['scan','ledger','firms'].forEach(id => {
+    document.getElementById('page-' + id).style.display = id==='firms' ? '' : 'none';
+    document.getElementById('nav-' + id).classList.toggle('on', id==='firms');
   });
   renderYearFolders();
   renderFirms();

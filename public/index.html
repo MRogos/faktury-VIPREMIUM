@@ -335,10 +335,22 @@ function renderLedger(){
     return new Date(b.date)-new Date(a.date);
   });
 
+  const costIds = costs.map(i=>i.id);
+
   function makeTable(rows, title, color){
     if(!rows.length) return `<div class="card" style="border:0.5px solid ${color}20"><div style="color:${color};font-weight:600;font-size:13px;margin-bottom:8px">${title} — brak pozycji</div></div>`;
+    const isCosts = title.includes('KOSZTY');
+    const allPaid = isCosts && rows.every(i=>i.paid);
+    const selectAllChk = isCosts
+      ? `<input type="checkbox" id="chk-all" ${allPaid?'checked':''} title="Zaznacz wszystkie jako opłacone"
+          onchange="markAllPaid(this.checked)"
+          style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent);vertical-align:middle"> Wszystkie`
+      : 'Opłac.';
     let h=`<div class="card" style="border:0.5px solid ${color}30;padding:0;overflow:hidden">
-      <div style="padding:10px 14px;background:${color}08;border-bottom:0.5px solid ${color}20;font-weight:600;font-size:13px;color:${color}">${title} <span style="font-weight:400;opacity:.7;font-size:12px">(${rows.length})</span></div>
+      <div style="padding:10px 14px;background:${color}08;border-bottom:0.5px solid ${color}20;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600;font-size:13px;color:${color}">${title} <span style="font-weight:400;opacity:.7;font-size:12px">(${rows.length})</span></span>
+        ${isCosts?`<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:6px"><input type="checkbox" id="chk-all" ${allPaid?'checked':''} onchange="markAllPaid(this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)"> Zaznacz wszystkie opłacone</label>`:''}
+      </div>
       <div class="tbl-wrap"><table><thead><tr>
         <th>Data</th><th>Firma</th><th>Nr / Kontrahent</th>
         <th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th>
@@ -684,6 +696,19 @@ async function doImport(){
 }
 
 // ACTIONS
+async function markAllPaid(paid){
+  const costs = invs.filter(i=>i.type==='buy');
+  const prefix = selYear+(selMonth?'-'+selMonth:'');
+  const toMark = invs.filter(i=>i.type==='buy'&&(selCo==='all'||i.company===selCo)&&(!selYear||(i.date&&i.date.startsWith(prefix))));
+  for(const i of toMark){
+    if(i.paid !== paid){
+      await fetch('/api/invoices/'+i.id+'/paid',{method:'PATCH',headers:authH(),body:JSON.stringify({paid})});
+      i.paid = paid;
+    }
+  }
+  renderLedger();renderFirms();
+}
+
 async function togglePaid(id,paid){
   await fetch('/api/invoices/'+id+'/paid',{method:'PATCH',headers:authH(),body:JSON.stringify({paid})});
   const i=invs.find(x=>x.id===id);if(i)i.paid=paid;

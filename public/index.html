@@ -894,9 +894,14 @@ function setMonth(y, m) {
   selectedYear = y;
   selectedMonth = m;
   expandedYears[y] = true;
+  // Automatycznie przełącz na Obliczenia firm
+  currentTab = 'firms';
+  ['scan', 'ledger', 'firms'].forEach(id => {
+    document.getElementById('page-' + id).style.display = id === 'firms' ? '' : 'none';
+    document.getElementById('nav-' + id).classList.toggle('on', id === 'firms');
+  });
   renderYearFolders();
-  if (currentTab === 'ledger') renderLedger();
-  if (currentTab === 'firms') renderFirms();
+  renderFirms();
 }
 
 function setYear(y) {

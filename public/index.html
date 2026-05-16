@@ -368,7 +368,9 @@ function stats(cid) {
   const nO = b.reduce((a, i) => a + calcN(i.brutto, i.vatRate), 0);
   const vI = s.reduce((a, i) => a + calcV(i.brutto, i.vatRate), 0);
   const vO = b.reduce((a, i) => a + calcV(i.brutto, i.vatRate), 0);
-  return { gI, gO, nI, nO, vI, vO, vatDue: vI - vO, bal: nI - nO, cnt: inv.length };
+  const paidO = b.filter(i => i.paid).reduce((a, i) => a + i.brutto, 0);
+  const unpaidO = b.filter(i => !i.paid).reduce((a, i) => a + i.brutto, 0);
+  return { gI, gO, nI, nO, vI, vO, vatDue: vI - vO, bal: nI - nO, cnt: inv.length, paidO, unpaidO };
 }
 
 function setStatus(type, msg) {
@@ -732,6 +734,11 @@ function renderLedger() {
       <td style="text-align:right">${fmt(calcN(i.brutto, i.vatRate))}</td>
       <td style="text-align:right;opacity:.6">${i.vatRate}%</td>
       <td style="text-align:right;color:var(--accent)">${fmt(i.brutto)}${i.nbpInfo ? `<span title="${i.nbpInfo}" style="cursor:help;margin-left:4px;opacity:.5;font-size:10px">€</span>` : ''}</td>
+      <td style="text-align:center">
+        ${i.type === 'buy' ? `<input type="checkbox" ${i.paid ? 'checked' : ''} 
+          onchange="togglePaid('${i.id}', this.checked)"
+          style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">` : '—'}
+      </td>
       <td><button class="sm danger" onclick="delInv('${i.id}')">✕</button></td>
     </tr>`;
   });
@@ -766,6 +773,8 @@ function renderFirms() {
           <div class="stat-box"><div class="sl">Koszty netto</div><div class="sv">${fmt(s.nO)}</div></div>
           <div class="stat-box"><div class="sl">Wynik netto</div><div class="sv ${plus ? 'pos' : 'neg'}">${fmt(s.bal)}</div></div>
           <div class="stat-box"><div class="sl">VAT do zapłaty</div><div class="sv ${s.vatDue > 0 ? 'warn' : s.vatDue < 0 ? 'pos' : ''}">${fmt(s.vatDue)}</div></div>
+          <div class="stat-box" style="border:0.5px solid rgba(96,200,144,.3)"><div class="sl">✓ Koszty opłacone</div><div class="sv pos">${fmt(s.paidO)}</div></div>
+          <div class="stat-box" style="border:0.5px solid rgba(240,176,96,.3)"><div class="sl">⏳ Do opłacenia</div><div class="sv warn">${fmt(s.unpaidO)}</div></div>
         </div>
         <div>
           <div class="vat-row"><span style="opacity:.6">VAT należny (sprzedaż)</span><span>${fmt(s.vI)}</span></div>
@@ -799,6 +808,18 @@ function renderFirms() {
     h += `</div>`;
   });
   document.getElementById('firms-content').innerHTML = h;
+}
+
+async function togglePaid(id, paid) {
+  await fetch('/api/invoices/' + id + '/paid', {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ paid })
+  });
+  const inv = invs.find(i => i.id === id);
+  if (inv) inv.paid = paid;
+  if (currentTab === 'ledger') renderLedger();
+  if (currentTab === 'firms') renderFirms();
 }
 
 async function delInv(id) {

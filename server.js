@@ -38,6 +38,7 @@ async function initDB() {
         nbp_table VARCHAR(50),
         nbp_info TEXT,
         confidence VARCHAR(20),
+        paid BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -96,6 +97,17 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
       ON CONFLICT (id) DO NOTHING
     `, [i.id, i.company, i.type, i.num, i.date, i.contractor, i.buyer, i.description,
         i.brutto, i.bruttoOrig, i.vatRate, i.currency, i.nbpRate, i.nbpDate, i.nbpTable, i.nbpInfo, i.confidence]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Oznacz fakturę jako opłaconą
+app.patch('/api/invoices/:id/paid', requireAuth, async (req, res) => {
+  try {
+    const { paid } = req.body;
+    await pool.query('UPDATE invoices SET paid = $1 WHERE id = $2', [paid, req.params.id]);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

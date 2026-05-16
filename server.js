@@ -11,6 +11,7 @@ const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.post('/api/scan', async (req, res) => {
   try {
+    console.log('Calling Anthropic API...');
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -21,8 +22,13 @@ app.post('/api/scan', async (req, res) => {
       body: JSON.stringify(req.body),
     });
     const data = await response.json();
+    console.log('Status:', response.status, 'Data:', JSON.stringify(data).slice(0, 300));
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error?.message || 'API error', full: data });
+    }
     res.json(data);
   } catch (e) {
+    console.error('Error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });

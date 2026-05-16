@@ -404,7 +404,7 @@ Zasady: type=sale gdy faktura wystawiona przez firmę z grupy Vipremium (przych�
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 2000,
         system: sys,
         messages: [{ role: 'user', content: [block, { type: 'text', text: 'Przeanalizuj fakturę i zwróć JSON.' }] }]

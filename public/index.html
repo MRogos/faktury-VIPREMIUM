@@ -318,7 +318,7 @@ function ledgerRow(i){
     <td>${co?co.short:'?'}</td>
     <td style="font-family:var(--font);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
       ${unpaid?'<span style="color:var(--amber);font-size:10px;margin-right:4px">●</span>':''}
-      ${i.num?i.num+' &middot; ':''}<span style="opacity:.6">${(i.contractor||i.description||'—').slice(0,45)}</span>
+      ${i.num?i.num+' · ':''}<span style="opacity:.6">${(i.contractor||i.description||'—').slice(0,45)}</span>
       ${i.nbpInfo?'<span title="'+i.nbpInfo+'" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">€</span>':''}
     </td>
     <td style="text-align:right">${fmt(calcN(i.brutto,i.vatRate))}</td>

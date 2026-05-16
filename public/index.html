@@ -438,10 +438,10 @@ async function processFile(file) {
 Zasady: type=sale gdy faktura wystawiona przez firmę z grupy Vipremium (przychód), type=buy gdy zakup od zewnętrznego dostawcy (koszt). Jeśli czegoś nie możesz odczytać wstaw null. WAŻNE: raw_text max 200 znaków. Tylko JSON — nic więcej.`;
 
     const resp = await fetch('/api/scan', {
-      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() },
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-auth-token': getToken(),
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',

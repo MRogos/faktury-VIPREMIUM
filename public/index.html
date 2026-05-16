@@ -253,6 +253,7 @@ var expCo = {all:true};
 var expYr = {};
 var expF = {};
 var _imp = [];
+var sel = {};
 
 // ===== HELPERS =====
 function fmt(n) { return new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(+n||0); }
@@ -762,6 +763,42 @@ function doImport(){
 }
 
 // ===== ACTIONS =====
+function selAll(checked, ids){
+  ids.forEach(function(id){ if(checked) sel[id]=true; else delete sel[id]; });
+  renderLedger();
+}
+function toggleSel(id, checked){
+  if(checked) sel[id]=true; else delete sel[id];
+  renderLedger();
+}
+function markSelPaid(paid){
+  var ids = Object.keys(sel);
+  if(!ids.length) return;
+  var p = Promise.resolve();
+  ids.forEach(function(id){
+    var i = invs.find(function(x){return x.id===id;});
+    if(i && i.type==='buy'){
+      p = p.then(function(){
+        return fetch('/api/invoices/'+id+'/paid',{method:'PATCH',headers:ah(),body:JSON.stringify({paid:paid})})
+        .then(function(){i.paid=paid;});
+      });
+    }
+  });
+  p.then(function(){sel={};renderLedger();renderFirms();});
+}
+function delSel(){
+  var ids = Object.keys(sel);
+  if(!ids.length) return;
+  if(!confirm('Usunąć '+ids.length+' faktur?')) return;
+  var p = Promise.resolve();
+  ids.forEach(function(id){
+    p = p.then(function(){
+      return fetch('/api/invoices/'+id,{method:'DELETE',headers:{'x-auth-token':tok()}})
+      .then(function(){invs=invs.filter(function(i){return i.id!==id;});});
+    });
+  });
+  p.then(function(){sel={};renderTree();renderCur();});
+}
 function markAll(paid){
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var toMark=invs.filter(function(i){return i.type==='buy'&&(selCo==='all'||i.company===selCo)&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));});

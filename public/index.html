@@ -417,7 +417,8 @@ Zasady: type=sale gdy faktura wystawiona przez firmÄ™ z grupy Vipremium (przychÃ
     }
 
     const data = await resp.json();
-    const txt = data.content.map(x => x.text || '').join('').replace(/```json|```/g, '').trim();
+    if (!data.content) throw new Error(data.error || JSON.stringify(data));
+    const txt = data.content.map(x => x.text || "").join("").replace(/```json|```/g, "").trim();
 
     let ai;
     try {

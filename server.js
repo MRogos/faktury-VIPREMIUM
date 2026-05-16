@@ -10,14 +10,13 @@ app.use(express.static('public'));
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const DATABASE_URL = process.env.DATABASE_URL;
+const APP_PASSWORD = process.env.APP_PASSWORD || 'vipremium2026';
 
-// Połączenie z bazą PostgreSQL
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Inicjalizacja tabeli przy starcie
 async function initDB() {
   try {
     await pool.query(`
@@ -49,28 +48,36 @@ async function initDB() {
 }
 initDB();
 
+// Auth middleware
+function requireAuth(req, res, next) {
+  const token = req.headers['x-auth-token'];
+  if (token !== APP_PASSWORD) {
+    return res.status(401).json({ error: 'Brak autoryzacji' });
+  }
+  next();
+}
+
+// Login
+app.post('/api/auth', (req, res) => {
+  const { password } = req.body;
+  if (password === APP_PASSWORD) {
+    res.json({ ok: true });
+  } else {
+    res.json({ ok: false });
+  }
+});
+
 // Pobierz wszystkie faktury
-app.get('/api/invoices', async (req, res) => {
+app.get('/api/invoices', requireAuth, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM invoices ORDER BY created_at DESC');
     const invoices = result.rows.map(r => ({
-      id: r.id,
-      company: r.company,
-      type: r.type,
-      num: r.num,
-      date: r.date,
-      contractor: r.contractor,
-      buyer: r.buyer,
-      description: r.description,
-      brutto: parseFloat(r.brutto),
-      bruttoOrig: parseFloat(r.brutto_orig) || null,
-      vatRate: r.vat_rate,
-      currency: r.currency,
-      nbpRate: parseFloat(r.nbp_rate) || null,
-      nbpDate: r.nbp_date,
-      nbpTable: r.nbp_table,
-      nbpInfo: r.nbp_info,
-      confidence: r.confidence,
+      id: r.id, company: r.company, type: r.type, num: r.num, date: r.date,
+      contractor: r.contractor, buyer: r.buyer, description: r.description,
+      brutto: parseFloat(r.brutto), bruttoOrig: parseFloat(r.brutto_orig) || null,
+      vatRate: r.vat_rate, currency: r.currency,
+      nbpRate: parseFloat(r.nbp_rate) || null, nbpDate: r.nbp_date,
+      nbpTable: r.nbp_table, nbpInfo: r.nbp_info, confidence: r.confidence,
     }));
     res.json(invoices);
   } catch (e) {
@@ -79,7 +86,7 @@ app.get('/api/invoices', async (req, res) => {
 });
 
 // Zapisz fakturę
-app.post('/api/invoices', async (req, res) => {
+app.post('/api/invoices', requireAuth, async (req, res) => {
   try {
     const i = req.body;
     await pool.query(`
@@ -96,7 +103,7 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 // Usuń fakturę
-app.delete('/api/invoices/:id', async (req, res) => {
+app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM invoices WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
@@ -105,8 +112,8 @@ app.delete('/api/invoices/:id', async (req, res) => {
   }
 });
 
-// Proxy do Anthropic API
-app.post('/api/scan', async (req, res) => {
+// Proxy Anthropic
+app.post('/api/scan', requireAuth, async (req, res) => {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -118,16 +125,14 @@ app.post('/api/scan', async (req, res) => {
       body: JSON.stringify(req.body),
     });
     const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data.error?.message || 'API error', full: data });
-    }
+    if (!response.ok) return res.status(response.status).json({ error: data.error?.message, full: data });
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Proxy do NBP
+// Proxy NBP
 app.get('/api/nbp/:currency/:date', async (req, res) => {
   const { currency, date } = req.params;
   const d = new Date(date);

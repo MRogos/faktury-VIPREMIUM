@@ -366,10 +366,7 @@ function renderLedger(){
     return h;
   }
 
-  let h=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start">
-    <div>${makeTable(sales,'📈 PRZYCHODY','#60c890')}</div>
-    <div>${makeTable(costs,'📉 KOSZTY','#f06060')}</div>
-  </div>`;
+  let h=makeTable(sales,'📈 PRZYCHODY','#60c890')+'<div style="margin-top:16px"></div>'+makeTable(costs,'📉 KOSZTY','#f06060');
   document.getElementById('ledger-table').innerHTML=h;
 }
 

@@ -63,6 +63,16 @@ body {
 }
 .nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
 .nav-item.on { color: var(--accent); border-left-color: var(--accent); background: rgba(200,240,96,.05); }
+.yr-sec { padding: 16px 20px 6px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.yr-item { display: flex; align-items: center; gap: 8px; padding: 7px 20px; cursor: pointer; font-size: 13px; color: var(--muted); font-family: var(--mono); border-left: 2px solid transparent; transition: all .15s; }
+.yr-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.yr-item.on { color: var(--accent); border-left-color: var(--accent); background: rgba(200,240,96,.05); }
+.yr-cnt { margin-left: auto; font-size: 10px; background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 999px; }
+.mo-item { display: flex; align-items: center; gap: 8px; padding: 5px 20px 5px 36px; cursor: pointer; font-size: 12px; color: var(--muted); font-family: var(--mono); border-left: 2px solid transparent; transition: all .15s; }
+.mo-item:hover { color: var(--text); background: rgba(255,255,255,.02); }
+.mo-item.on { color: var(--accent); border-left-color: var(--accent); background: rgba(200,240,96,.04); }
+.yr-chev { font-size: 10px; transition: transform .2s; display: inline-block; }
+.yr-chev.open { transform: rotate(90deg); }
 .nav-icon { font-size: 15px; }
 .main { flex: 1; padding: 32px 36px; max-width: 900px; }
 h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
@@ -288,6 +298,8 @@ tr:hover td { background: rgba(255,255,255,.02); }
     <div class="nav-item" id="nav-firms" onclick="setTab('firms')">
       <span class="nav-icon">◈</span> Obliczenia firm
     </div>
+    <div class="yr-sec">Rok rozliczeniowy</div>
+    <div id="yr-folders"></div>
   </nav>
 
   <!-- Main -->
@@ -338,6 +350,9 @@ let invs = [];
 let pending = null;
 let expanded = { vt: true, pt: true, et: true, vr: true };
 let currentTab = 'scan';
+let selectedYear = new Date().getFullYear().toString();
+let selectedMonth = null;
+let expandedYears = { [new Date().getFullYear().toString()]: true };
 
 function saveKey(v) {
   localStorage.setItem('vip_api_key', v);
@@ -359,7 +374,8 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const today = () => new Date().toISOString().slice(0, 10);
 
 function stats(cid) {
-  const inv = invs.filter(i => cid === 'all' || i.company === cid);
+  const prefix = selectedYear + (selectedMonth ? '-' + selectedMonth : '');
+  const inv = invs.filter(i => (cid === 'all' || i.company === cid) && (!selectedYear || (i.date && i.date.startsWith(prefix))));
   const s = inv.filter(i => i.type === 'sale');
   const b = inv.filter(i => i.type === 'buy');
   const gI = s.reduce((a, i) => a + i.brutto, 0);
@@ -696,6 +712,7 @@ function setTab(t) {
     document.getElementById('page-' + id).style.display = id === t ? '' : 'none';
     document.getElementById('nav-' + id).classList.toggle('on', id === t);
   });
+  renderYearFolders();
   if (t === 'ledger') renderLedger();
   if (t === 'firms') renderFirms();
 }
@@ -831,11 +848,72 @@ async function delInv(id) {
 }
 
 /* Init */
+const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+
+function renderYearFolders() {
+  const el = document.getElementById('yr-folders');
+  if (!el) return;
+  const years = ['2025', '2026', '2027'];
+  let html = '';
+  years.forEach(y => {
+    const yCnt = invs.filter(i => i.date && i.date.startsWith(y)).length;
+    const isExp = expandedYears[y];
+    const isSelYear = selectedYear === y && !selectedMonth;
+    html += '<div class="yr-item ' + (isSelYear?'on':'') + '" onclick="toggleYear(\'' + y + '\')">' +
+      '<span class="yr-chev ' + (isExp?'open':'') + '">▶</span>' +
+      '<span>📁</span> ' + y +
+      '<span class="yr-cnt">' + yCnt + '</span></div>';
+    if (isExp) {
+      MONTHS.forEach((m, idx) => {
+        const prefix = y + '-' + m;
+        const mCnt = invs.filter(i => i.date && i.date.startsWith(prefix)).length;
+        if (mCnt === 0 && selectedYear !== y) return;
+        const isSel = selectedYear === y && selectedMonth === m;
+        html += '<div class="mo-item ' + (isSel?'on':'') + '" onclick="setMonth(\'' + y + '\',\'' + m + '\')">' +
+          '📄 ' + MONTH_NAMES[idx] +
+          '<span class="yr-cnt">' + mCnt + '</span></div>';
+      });
+    }
+  });
+  el.innerHTML = html;
+}
+
+function toggleYear(y) {
+  expandedYears[y] = !expandedYears[y];
+  if (expandedYears[y]) {
+    selectedYear = y;
+    selectedMonth = null;
+  }
+  renderYearFolders();
+  if (currentTab === 'ledger') renderLedger();
+  if (currentTab === 'firms') renderFirms();
+}
+
+function setMonth(y, m) {
+  selectedYear = y;
+  selectedMonth = m;
+  expandedYears[y] = true;
+  renderYearFolders();
+  if (currentTab === 'ledger') renderLedger();
+  if (currentTab === 'firms') renderFirms();
+}
+
+function setYear(y) {
+  selectedYear = y;
+  selectedMonth = null;
+  expandedYears[y] = true;
+  renderYearFolders();
+  if (currentTab === 'ledger') renderLedger();
+  if (currentTab === 'firms') renderFirms();
+}
+
 async function loadApp() {
   try {
     const r = await fetch('/api/invoices', { headers: {'x-auth-token': getToken()} });
     invs = await r.json();
   } catch(e) { console.error('Błąd ładowania faktur:', e); }
+  renderYearFolders();
   if (currentTab === 'ledger') renderLedger();
   if (currentTab === 'firms') renderFirms();
 }

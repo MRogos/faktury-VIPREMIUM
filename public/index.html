@@ -401,6 +401,23 @@ function buildTable(rows,title,color,isCosts){
   h+='<th style="width:32px;text-align:center"><input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+varName+')" title="Zaznacz wszystkie"></th>';
   h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th><th>Notatka</th>';
   h+='</tr></thead><tbody>';
+  function makeDueCell(inv){
+    var days=-1;
+    if(inv.dueDate){
+      var diff=new Date(inv.dueDate)-new Date();
+      days=Math.ceil(diff/(1000*60*60*24));
+    }
+    var col=days<0?'var(--red)':days<=2?'var(--red)':days<=7?'var(--amber)':'var(--green)';
+    var label=days<0?('Minął '+Math.abs(days)+'d'):days===0?'DZISIAJ!':days===1?'Jutro':(days+'d');
+    var txt=inv.dueDate
+      ?('<span style="color:'+col+';cursor:pointer;font-size:11px" data-due="'+inv.id+'">'+label+'</span>')
+      :('<span style="color:var(--muted);cursor:pointer;font-size:10px" data-due="'+inv.id+'">+ termin</span>');
+    return '<div style="display:flex;align-items:center;gap:4px">'
+      +txt
+      +'<input type="date" value="'+(inv.dueDate||'')+'" data-id="'+inv.id+'" data-action="due" onchange="onDueChange(event)" '
+      +'style="width:18px;height:18px;background:transparent;border:none;opacity:0.4;cursor:pointer;font-size:10px">'
+      +'</div>';
+  }
   rows.forEach(function(i){
     var co=COS.find(function(x){return x.id===i.company;});
     var unpaid=i.type==='buy'&&!i.paid;
@@ -408,16 +425,21 @@ function buildTable(rows,title,color,isCosts){
     var nbp=i.nbpInfo?'<span title="'+i.nbpInfo+'" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">EUR</span>':'';
     var dot=unpaid?'<span style="color:var(--amber);font-size:9px;margin-right:3px">&#9679;</span>':'';
     var bg=isSel?'background:rgba(240,96,96,.08)':unpaid?'background:rgba(240,176,96,.04)':'';
+    var overdueMark=isOverdue(i)?'color:var(--red);font-weight:600':'';
+    var dueCell=isCosts?makeDueCell(i):'-';
+    var noteCell='<input type="text" placeholder="Notatka..." value="'+(i.note||'')+'" data-id="'+i.id+'" data-action="note" onchange="onNoteChange(event)" style="width:120px;padding:2px 6px;background:transparent;border:0.5px solid transparent;border-radius:4px;color:var(--muted);font-size:11px">';
     h+='<tr style="'+bg+'">';
-    h+='<td style="text-align:center"><input class="chk" type="checkbox" '+(isSel?'checked':'')+' data-id='+i.id+' data-action="sel" onchange="onChkChange(event)"></td>';
+    h+='<td style="text-align:center"><input class="chk" type="checkbox" '+(isSel?'checked':'')+' data-id="'+i.id+'" data-action="sel" onchange="onChkChange(event)"></td>';
     h+='<td>'+(i.date||'-')+'</td>';
+    h+='<td style="text-align:center">'+dueCell+'</td>';
     h+='<td>'+(co?co.short:'?')+'</td>';
-    h+='<td style="font-family:var(--font);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+dot+(i.num?i.num+' - ':'')+'<span style="opacity:.6">'+(i.contractor||i.description||'-').slice(0,40)+'</span>'+nbp+'</td>';
+    h+='<td style="font-family:var(--font);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+dot+(i.num?i.num+' - ':'')+'<span style="opacity:.6">'+(i.contractor||i.description||'-').slice(0,38)+'</span>'+nbp+'</td>';
     h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
     h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
     h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
-    h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-    h+='<td><button class="sm del" data-id='+i.id+' data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id="'+i.id+'" data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
+    h+='<td><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td>'+noteCell+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
@@ -487,7 +509,7 @@ function sfile(file){
     var block=mime==='application/pdf'
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
-    var sys='Jestes systemem OCR do polskich faktur VAT. Zwroc TYLKO JSON bez markdown:\n{"num":"numer faktury","date":"YYYY-MM-DD","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba,"netto":liczba,"vat_rate":liczba,"currency":"PLN","description":"opis max 80 znakow","raw_text":"pierwsze 150 znakow","confidence":"high/medium/low"}\ntype=sale gdy faktura od firmy Vipremium, buy=zakup zewnetrzny. Jesli brak wstaw null. Tylko JSON.';
+    var sys='Jestes systemem OCR do polskich faktur VAT. Zwroc TYLKO JSON bez markdown:\n{"num":"numer faktury","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba,"netto":liczba,"vat_rate":liczba,"currency":"PLN","description":"opis max 80 znakow","raw_text":"pierwsze 150 znakow","confidence":"high/medium/low"}\ndue_date = termin platnosci z faktury (szukaj: termin platnosci, platne do, due date, zaplacic do). type=sale gdy faktura od firmy Vipremium, buy=zakup zewnetrzny. Jesli brak wstaw null. Tylko JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',max_tokens:1000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -506,7 +528,8 @@ function sfile(file){
     pending={id:uid(),company:guess||'vt',guessed:!!guess,type:ai.type==='sale'?'sale':'buy',
       num:ai.num||'',date:ai.date||today(),contractor:ai.contractor||'',buyer:ai.buyer||'',
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',
-      nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:ai.confidence||'medium',bruttoOrig:null,paid:false};
+      nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:ai.confidence||'medium',
+      bruttoOrig:null,paid:false,dueDate:ai.due_date||null,note:null};
     if(pending.currency!=='PLN'){
       setMsg('sstatus','<span class="spin">&#8635;</span> Pobieram kurs NBP...','info');
       return fetch('/api/nbp/'+pending.currency+'/'+pending.date).then(function(r){
@@ -554,7 +577,8 @@ function renderSForm(){
   g('sform').innerHTML='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:600;font-size:15px">Weryfikacja faktury</div><span style="font-size:11px;color:var(--muted)">Pewnosc AI: '+pending.confidence+'</span></div>'+nbp
     +'<div class="g2"><div class="fg"><label>Firma</label><select id="pco" onchange="pending.company=this.value">'+coOpts+'</select><span style="font-size:11px;color:'+(pending.guessed?'var(--green)':'var(--muted)')+'">'+(pending.guessed?'rozpoznana auto':'wybrana recznie')+'</span></div>'
     +'<div class="fg"><label>Typ</label><select onchange="pending.type=this.value"><option value="sale"'+(pending.type==='sale'?' selected':'')+'>Sprzedaz (przychod)</option><option value="buy"'+(pending.type==='buy'?' selected':'')+'>Zakup (koszt)</option></select></div></div>'
-    +'<div class="g2"><div class="fg"><label>Numer faktury</label><input type="text" value="'+(pending.num||'')+'" oninput="pending.num=this.value" placeholder="FV/2026/001"></div><div class="fg"><label>Data</label><input type="date" value="'+(pending.date||today())+'" oninput="pending.date=this.value"></div></div>'
+    +'<div class="g2"><div class="fg"><label>Numer faktury</label><input type="text" value="'+(pending.num||'')+'" oninput="pending.num=this.value" placeholder="FV/2026/001"></div><div class="fg"><label>Data wystawienia</label><input type="date" value="'+(pending.date||today())+'" oninput="pending.date=this.value"></div></div>'
+    +'<div class="g2"><div class="fg"><label>Termin płatności'+(pending.dueDate?' ✓ wykryty':'')+'</label><input type="date" value="'+(pending.dueDate||'')+'" oninput="pending.dueDate=this.value" style="'+(pending.dueDate?'border-color:var(--green)':'')+'"></div><div class="fg"><label>Nabywca</label><input type="text" value="'+(pending.buyer||'')+'" oninput="pending.buyer=this.value"></div></div>'
     +'<div class="g1"><div class="fg"><label>Kontrahent</label><input type="text" value="'+(pending.contractor||'')+'" oninput="pending.contractor=this.value"></div></div>'
     +'<div class="g1"><div class="fg"><label>Opis</label><input type="text" value="'+(pending.description||'')+'" oninput="pending.description=this.value"></div></div>'
     +'<div class="g2"><div class="fg"><label>Kwota brutto PLN'+(isEUR?' (przeliczona)':'')+'</label><input type="number" id="pbrutto" value="'+(pending.brutto||'')+'" step="0.01" oninput="pending.brutto=parseFloat(this.value)||0;refreshComp()"></div>'
@@ -574,6 +598,7 @@ function refreshComp(){
 function saveInv(){
   if(!pending||!pending.brutto||pending.brutto<=0){alert('Podaj kwote brutto!');return;}
   var inv=Object.assign({},pending);
+  if(!inv.dueDate&&inv.aiDueDate)inv.dueDate=inv.aiDueDate;
   if(inv.currency!=='PLN'&&inv.nbpRate){inv.nbpInfo=(inv.bruttoOrig||inv.brutto).toFixed(2)+' '+inv.currency+' x '+inv.nbpRate.toFixed(4)+' PLN (NBP '+inv.nbpDate+')';}
   fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)})
   .then(function(){if(!invs.find(function(x){return x.id===inv.id;}))invs.push(inv);pending=null;renderSForm();setMsg('sstatus','Faktura zaksiegowana!','ok');renderTree();})
@@ -619,6 +644,11 @@ function impXLSX(file){
       var kurs=cKurs?(parseFloat(String(r[cKurs]||'').replace(',','.'))||1):1;
       var curr=cCurr?String(r[cCurr]||'PLN').trim():'PLN';
       var poz=cPoz?parseFloat(String(r[cPoz]||'').replace(',','.')):null;
+      var cTermin=fc('Termin platnosci','Termin zapłaty','termin','due date','platne do');
+      var rawTermin=cTermin?r[cTermin]:'';
+      var terminStr='';
+      if(rawTermin instanceof Date)terminStr=rawTermin.toISOString().slice(0,10);
+      else if(typeof rawTermin==='string'&&rawTermin.length>=10)terminStr=rawTermin.slice(0,10);
       var isPaid=poz!==null&&!isNaN(poz)&&poz===0&&brutto>0;
       var desc=cZlec?String(r[cZlec]||'').trim():'';
       var vatRate=0;
@@ -626,7 +656,7 @@ function impXLSX(file){
       else if(brutto>0&&netto>0&&curr==='PLN'){var c3=Math.round(((brutto/netto)-1)*100);if(VATS.indexOf(c3)>=0)vatRate=c3;}
       var bruttoPLN=brutto,bruttoOrig=null,nbpRate=null,nbpInfo=null;
       if(curr!=='PLN'&&kurs>1){bruttoOrig=brutto;bruttoPLN=Math.round(brutto*kurs*100)/100;nbpRate=kurs;nbpInfo=brutto.toFixed(2)+' '+curr+' x '+kurs.toFixed(4)+' = '+bruttoPLN.toFixed(2)+' PLN (kurs z FV)';}
-      return{id:'x'+uid(),company:company,type:type,num:String(r[cNum]||'').trim(),date:dateStr,contractor:String(r[cCont]||'').trim(),buyer:'',description:desc,brutto:bruttoPLN,bruttoOrig:bruttoOrig,vatRate:vatRate,currency:curr,nbpRate:nbpRate,nbpDate:dateStr,nbpTable:'z faktury',nbpInfo:nbpInfo,confidence:'high',paid:isPaid};
+      return{id:'x'+uid(),company:company,type:type,num:String(r[cNum]||'').trim(),date:dateStr,contractor:String(r[cCont]||'').trim(),buyer:'',description:desc,brutto:bruttoPLN,bruttoOrig:bruttoOrig,vatRate:vatRate,currency:curr,nbpRate:nbpRate,nbpDate:dateStr,nbpTable:'z faktury',nbpInfo:nbpInfo,confidence:'high',paid:isPaid,dueDate:terminStr||null,note:null};
     }).filter(function(r){return r.brutto>0;});
     if(!parsed.length)throw new Error('Nie znaleziono faktur');
     _imp=parsed;
@@ -1008,15 +1038,36 @@ function renderOverdueAlert(){
 
 // === EXPORT ===
 function exportCSV(){
-  fetch('/api/export/csv',{headers:{'x-auth-token':tok()}})
-  .then(function(r){return r.blob();})
-  .then(function(blob){
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');
-    a.href=url;a.download='faktury-vipremium.csv';
-    document.body.appendChild(a);a.click();
-    document.body.removeChild(a);URL.revokeObjectURL(url);
+  // Build CSV from local data - no server needed
+  var headers=['ID','Firma','Typ','Numer','Data','Kontrahent','Opis','Brutto PLN','VAT%','Waluta','Termin platnosci','Notatka','Oplacona'];
+  var rows=[headers.join(';')];
+  invs.forEach(function(i){
+    var co=COS.find(function(x){return x.id===i.company;});
+    rows.push([
+      i.id,
+      co?co.short:i.company,
+      i.type==='sale'?'Przychod':'Koszt',
+      (i.num||'').replace(/;/g,','),
+      i.date||'',
+      (i.contractor||'').replace(/;/g,','),
+      (i.description||'').replace(/;/g,','),
+      String(i.brutto).replace('.',','),
+      i.vatRate+'%',
+      i.currency||'PLN',
+      i.dueDate||'',
+      (i.note||'').replace(/;/g,',').replace(/\n/g,' '),
+      i.paid?'TAK':'NIE'
+    ].join(';'));
   });
+  var csv='\uFEFF'+rows.join('\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='faktury-vipremium-'+selYear+'.csv';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 window.onload=function(){

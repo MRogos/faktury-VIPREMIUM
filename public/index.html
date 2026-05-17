@@ -402,20 +402,17 @@ function buildTable(rows,title,color,isCosts){
   h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th><th>Notatka</th>';
   h+='</tr></thead><tbody>';
   function makeDueCell(inv){
-    var days=-1;
+    var days=999;
     if(inv.dueDate){
       var diff=new Date(inv.dueDate)-new Date();
       days=Math.ceil(diff/(1000*60*60*24));
     }
-    var col=days<0?'var(--red)':days<=2?'var(--red)':days<=7?'var(--amber)':'var(--green)';
-    var label=days<0?('Minął '+Math.abs(days)+'d'):days===0?'DZISIAJ!':days===1?'Jutro':(days+'d');
-    var txt=inv.dueDate
-      ?('<span style="color:'+col+';cursor:pointer;font-size:11px" data-due="'+inv.id+'">'+label+'</span>')
-      :('<span style="color:var(--muted);cursor:pointer;font-size:10px" data-due="'+inv.id+'">+ termin</span>');
-    return '<div style="display:flex;align-items:center;gap:4px">'
-      +txt
+    var col=!inv.dueDate?'var(--muted)':days<0?'var(--red)':days<=2?'var(--red)':days<=7?'var(--amber)':'var(--green)';
+    var label=!inv.dueDate?'':days<0?('Minął '+Math.abs(days)+'d'):days===0?'DZISIAJ!':days===1?'Jutro':(days+'d');
+    return '<div style="display:flex;flex-direction:column;gap:1px">'
       +'<input type="date" value="'+(inv.dueDate||'')+'" data-id="'+inv.id+'" data-action="due" onchange="onDueChange(event)" '
-      +'style="width:18px;height:18px;background:transparent;border:none;opacity:0.4;cursor:pointer;font-size:10px">'
+      +'style="background:transparent;border:0.5px solid var(--border);border-radius:4px;color:'+col+';font-size:11px;font-family:var(--mono);width:118px;padding:2px 4px;cursor:pointer">'
+      +(label?'<span style="font-size:10px;color:'+col+';font-family:var(--mono);padding-left:2px">'+label+'</span>':'')
       +'</div>';
   }
   rows.forEach(function(i){

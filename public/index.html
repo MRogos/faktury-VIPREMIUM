@@ -690,9 +690,21 @@ function renderSForm(){
       +COST_CATS.map(function(c){return '<option value="'+c.id+'"'+(pending.costCat===c.id?' selected':'')+'>'+c.icon+' '+c.label+'</option>';}).join('')
       +'</select></div>'
       +'<div class="fg"><label>Pojazdy'+(autoVehicles.length?' ✓ '+autoVehicles.length+' wykrytych':'')+'</label>'
-      +'<div style="display:flex;flex-wrap:wrap;gap:4px;padding:6px;background:var(--bg3);border:0.5px solid var(--border);border-radius:8px;min-height:36px" id="veh-select">'
+      +'<div style="position:relative" id="veh-dropdown-wrap">'
+      +'<div onclick="toggleVehDropdown()" style="background:var(--bg3);border:0.5px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:36px">'
+      +'<span style="font-size:13px;color:'+(pending.vehicles&&pending.vehicles.length?'var(--text)':'var(--muted)')+'">'+getVehLabel(pending.vehicles)+'</span>'
+      +'<span style="color:var(--muted);font-size:11px">&#9660;</span>'
+      +'</div>'
+      +'<div id="veh-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:100;background:var(--bg2);border:0.5px solid var(--border2);border-radius:8px;padding:8px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,.4)">'
+      +'<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;margin-bottom:4px;background:rgba(45,224,200,.06);border:0.5px solid rgba(45,224,200,.2)" onclick="toggleAllVehicles()">'
+      +'<input type="checkbox" id="veh-all" '+(pending.vehicles&&pending.vehicles.length===FLEET.length?'checked':'')+' style="accent-color:var(--accent);width:14px;height:14px">'
+      +'<span style="font-size:12px;font-weight:600;color:var(--accent)">Wszystkie pojazdy ('+FLEET.length+')</span>'
+      +'</label>'
+      +'<div style="border-top:0.5px solid var(--border);margin-bottom:6px"></div>'
       +buildVehicleSelect(pending.vehicles)
-      +'</div></div>'
+      +'</div>'
+      +'</div>'
+      +'</div>'
       +'</div>'
     ):'')
     +'<div class="g2"><div class="fg"><label>Kwota brutto PLN'+(isEUR?' (przeliczona)':'')+'</label><input type="number" id="pbrutto" value="'+(pending.brutto||'')+'" step="0.01" oninput="pending.brutto=parseFloat(this.value)||0;refreshComp()"></div>'
@@ -711,17 +723,51 @@ function buildVehicleSelect(selected){
   var h='';
   FLEET.forEach(function(v){
     var isOn=sel.indexOf(v)>=0;
-    var bg=isOn?'rgba(45,224,200,.2)':'transparent';
-    var border=isOn?'var(--accent)':'transparent';
-    h+='<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px;font-family:var(--mono);padding:2px 6px;border-radius:4px;background:'+bg+';border:0.5px solid '+border+'">';
-    h+='<input type="checkbox" '+(isOn?'checked':'')+' data-veh="'+v+'" onchange="onVehChange(event)" style="width:11px;height:11px;accent-color:var(--accent)"> '+v+'</label>';
+    h+='<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;margin-bottom:2px;background:'+(isOn?'rgba(45,224,200,.08)':'transparent')+';transition:background .1s">';
+    h+='<input type="checkbox" '+(isOn?'checked':'')+' data-veh="'+v+'" onchange="onVehChange(event)" style="width:14px;height:14px;accent-color:var(--accent)">';
+    h+='<span style="font-family:var(--mono);font-size:13px;font-weight:600;color:'+(isOn?'var(--accent)':'var(--text)')+'">'+v+'</span>';
+    h+='</label>';
   });
   return h;
 }
 function onVehChange(e){
   var v=e.target.getAttribute('data-veh');
   toggleVehicle(v,e.target.checked);
+  // Update label without re-rendering whole form
+  var wrap=g('veh-dropdown-wrap');
+  if(wrap){
+    var label=wrap.querySelector('span');
+    if(label)label.textContent=getVehLabel(pending.vehicles);
+    label.style.color=pending.vehicles&&pending.vehicles.length?'var(--text)':'var(--muted)';
+  }
 }
+function getVehLabel(vehicles){
+  if(!vehicles||vehicles.length===0) return 'Wybierz pojazd(y)...';
+  if(vehicles.length===FLEET.length) return 'Wszystkie pojazdy ('+FLEET.length+')';
+  if(vehicles.length===1) return vehicles[0];
+  return vehicles.length+' pojazdow: '+vehicles.slice(0,3).join(', ')+(vehicles.length>3?'...':'');
+}
+function toggleVehDropdown(){
+  var d=g('veh-dropdown');
+  if(d)d.style.display=d.style.display==='none'?'block':'none';
+}
+function toggleAllVehicles(){
+  var allChk=document.getElementById('veh-all');
+  if(!allChk)return;
+  var shouldCheck=!allChk.checked;
+  if(shouldCheck){
+    pending.vehicles=FLEET.slice();
+  } else {
+    pending.vehicles=[];
+  }
+  renderSForm();
+}
+// Close dropdown when clicking outside
+document.addEventListener('click',function(e){
+  var wrap=g('veh-dropdown-wrap');
+  var d=g('veh-dropdown');
+  if(d&&wrap&&!wrap.contains(e.target))d.style.display='none';
+});
 function toggleVehicle(v,checked){
   if(!pending.vehicles)pending.vehicles=[];
   if(checked){if(pending.vehicles.indexOf(v)<0)pending.vehicles.push(v);}
@@ -1422,89 +1468,103 @@ function exportCSV(){
 }
 
 function renderVehicles(){
-  g('vsub').textContent=periodLabel();
+  g('vsub').textContent=periodLabel()+' • '+FLEET.length+' pojazdow';
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var buyInvs=invs.filter(function(i){
     return i.type==='buy'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
   });
 
-  var h='';
+  // Categories to show per vehicle (customs = shared, shown as one column)
+  var COLS=[
+    {id:'fuel',   label:'Tankowanie', icon:'⛽'},
+    {id:'ferry',  label:'Promy',      icon:'🚢'},
+    {id:'service',label:'Serwis',     icon:'🔧'},
+    {id:'toll',   label:'Autostrady', icon:'🛣️'},
+    {id:'other',  label:'Inne',       icon:'📦'}
+  ];
+  // Customs split equally across all vehicles
+  var customsTotal=buyInvs.filter(function(i){return i.costCat==='customs';})
+    .reduce(function(a,i){return a+i.brutto;},0);
+  var customsPerVeh=FLEET.length>0?customsTotal/FLEET.length:0;
 
-  // Summary bar - total per category
-  var catTotals={};
-  COST_CATS.forEach(function(c){catTotals[c.id]=0;});
-  buyInvs.forEach(function(i){
-    var cat=i.costCat||'other';
-    var veh=i.vehicles&&i.vehicles.length?i.vehicles:null;
-    var amt=veh?i.brutto/veh.length:i.brutto;
-    if(catTotals[cat]!==undefined)catTotals[cat]+=i.brutto;
-    else catTotals['other']+=i.brutto;
-  });
-
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:20px">';
-  COST_CATS.forEach(function(c){
-    var total=catTotals[c.id]||0;
-    h+='<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px">'
-      +'<div style="font-size:16px;margin-bottom:4px">'+c.icon+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+c.label+'</div>'
-      +'<div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--red)">'+fmt(total)+'</div>'
-      +'</div>';
-  });
-  h+='</div>';
-
-  // Per vehicle cards
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
-  FLEET.forEach(function(veh){
-    // Invoices assigned to this vehicle
-    var vehInvs=buyInvs.filter(function(i){
-      return i.vehicles&&i.vehicles.indexOf(veh)>=0;
-    });
-
-    function getVehShare(inv){
-      // For fuel and ferry - use precise per-vehicle breakdown if available
-      if((inv.costCat==='fuel'||inv.costCat==='ferry')&&inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
-        var vbEntry=inv.vehicleBreakdown.find(function(vb){return vb.plate===veh;});
-        if(vbEntry) return vbEntry.amount*(inv.nbpRate||1); // convert to PLN if needed
-      }
-      // Otherwise split equally
-      return inv.vehicles&&inv.vehicles.length>0?inv.brutto/inv.vehicles.length:inv.brutto;
+  function getVehShare(inv, veh){
+    if((inv.costCat==='fuel'||inv.costCat==='ferry')&&inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
+      var vb=inv.vehicleBreakdown.find(function(x){return x.plate===veh;});
+      if(vb) return parseFloat(vb.amount)*(inv.nbpRate||1);
     }
+    if(!inv.vehicles||inv.vehicles.length===0) return 0;
+    return inv.brutto/inv.vehicles.length;
+  }
 
-    var total=vehInvs.reduce(function(a,i){return a+getVehShare(i);},0);
-
+  // Build data per vehicle
+  var vehData=FLEET.map(function(veh){
+    var vehInvs=buyInvs.filter(function(i){return i.vehicles&&i.vehicles.indexOf(veh)>=0;});
     var cats={};
-    COST_CATS.forEach(function(c){cats[c.id]=0;});
+    COLS.forEach(function(c){cats[c.id]=0;});
     vehInvs.forEach(function(i){
-      var cat=i.costCat||'other';
-      var share=getVehShare(i);
-      if(cats[cat]!==undefined)cats[cat]+=share;else cats['other']+=share;
+      var cat=(i.costCat==='customs')?'other':(i.costCat||'other');
+      var share=getVehShare(i,veh);
+      if(cats[cat]!==undefined) cats[cat]+=share;
+      else cats['other']+=share;
     });
-
-    h+='<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:14px;border-top:2px solid var(--amber)">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-    h+='<div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--amber)">'+veh+'</div>';
-    h+='<div style="font-size:14px;font-weight:600;font-family:var(--mono);color:var(--red)">'+fmt(total)+'</div>';
-    h+='</div>';
-    h+='<div style="display:flex;flex-direction:column;gap:4px">';
-    COST_CATS.forEach(function(c){
-      if(cats[c.id]<=0)return;
-      var pct=total>0?Math.round(cats[c.id]/total*100):0;
-      h+='<div style="display:flex;align-items:center;gap:8px">';
-      h+='<span style="font-size:12px;width:16px">'+c.icon+'</span>';
-      h+='<span style="font-size:11px;color:var(--muted);width:100px;flex-shrink:0">'+c.label+'</span>';
-      h+='<div style="flex:1;background:var(--bg3);border-radius:3px;height:6px"><div style="width:'+pct+'%;background:var(--red);border-radius:3px;height:6px"></div></div>';
-      h+='<span style="font-size:11px;font-family:var(--mono);color:var(--red);width:80px;text-align:right">'+fmt(cats[c.id])+'</span>';
-      h+='</div>';
-    });
-    if(vehInvs.length===0){
-      h+='<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px">Brak przypisanych faktur</div>';
-    }
-    h+='</div></div>';
+    cats['customs']=customsPerVeh;
+    var total=COLS.reduce(function(a,c){return a+cats[c.id];},0)+customsPerVeh;
+    return {veh:veh,cats:cats,total:total};
   });
-  h+='</div>';
+
+  // Column totals
+  var colTotals={};
+  COLS.forEach(function(c){
+    colTotals[c.id]=vehData.reduce(function(a,d){return a+d.cats[c.id];},0);
+  });
+  var grandTotal=vehData.reduce(function(a,d){return a+d.total;},0);
+
+  // Build table
+  var h='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+
+  // Header
+  h+='<thead><tr style="border-bottom:1px solid var(--border)">';
+  h+='<th style="text-align:left;padding:10px 12px;color:var(--muted);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">Auto</th>';
+  COLS.forEach(function(c){
+    h+='<th style="text-align:right;padding:10px 12px;color:var(--muted);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">'+c.icon+' '+c.label+'</th>';
+  });
+  h+='<th style="text-align:right;padding:10px 12px;color:var(--muted);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">📋 Odprawa</th>';
+  h+='<th style="text-align:right;padding:10px 12px;color:var(--amber);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">RAZEM</th>';
+  h+='</tr></thead><tbody>';
+
+  // Rows
+  vehData.forEach(function(d){
+    var hasData=d.total>0;
+    h+='<tr style="border-bottom:0.5px solid var(--border);'+(hasData?'':'opacity:.4')+'">';
+    h+='<td style="padding:10px 12px;font-family:var(--mono);font-weight:700;color:var(--amber);white-space:nowrap">'+d.veh+'</td>';
+    COLS.forEach(function(c){
+      var val=d.cats[c.id]||0;
+      h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);color:'+(val>0?'var(--red)':'var(--muted)')+'">'+(val>0?fmt(val):'-')+'</td>';
+    });
+    h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);color:'+(customsPerVeh>0?'var(--red)':'var(--muted)')+'">'+( customsPerVeh>0?fmt(customsPerVeh):'-')+'</td>';
+    h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);font-weight:700;color:var(--amber)">'+fmt(d.total)+'</td>';
+    h+='</tr>';
+  });
+
+  // Totals row
+  h+='<tr style="border-top:1px solid var(--border);background:rgba(240,176,96,.06)">';
+  h+='<td style="padding:10px 12px;font-weight:700;color:var(--amber)">SUMA</td>';
+  COLS.forEach(function(c){
+    var val=colTotals[c.id]||0;
+    h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);font-weight:700;color:'+(val>0?'var(--amber)':'var(--muted)')+'">'+(val>0?fmt(val):'-')+'</td>';
+  });
+  h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);font-weight:700;color:'+(customsTotal>0?'var(--amber)':'var(--muted)')+'">'+( customsTotal>0?fmt(customsTotal):'-')+'</td>';
+  h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);font-weight:700;color:var(--amber)">'+fmt(grandTotal)+'</td>';
+  h+='</tr>';
+
+  h+='</tbody></table></div>';
+
+  // Info about customs split
+  if(customsTotal>0){
+    h+='<div style="margin-top:10px;font-size:11px;color:var(--muted);font-family:var(--mono)">📋 Odprawa celna '+fmt(customsTotal)+' podzielona rowno na '+FLEET.length+' pojazdow = '+fmt(customsPerVeh)+' / auto</div>';
+  }
 
   g('vcontent').innerHTML=h;
-  g('vsub').textContent=periodLabel()+' • '+FLEET.length+' pojazdow';
 }
 
 window.onload=function(){

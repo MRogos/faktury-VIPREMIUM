@@ -351,8 +351,7 @@ function buildTable(rows,title,color,isCosts){
   // Header
   h+='<div class="tsec-hd">';
   h+='<span style="color:'+color+';font-weight:600;font-size:13px">'+title+' <span style="opacity:.6;font-size:12px;font-weight:400">('+rows.length+')</span></span>';
-  h+='<div style="display:flex;align-items:center;gap:10px">';
-  h+='<button class="sm" onclick="selAll(true,'+idsJson+')" style="font-size:11px">&#9745; Zaznacz wszystkie</button>';
+  h+='<div style="display:flex;align-items:center;gap:12px">';
   if(isCosts){
     h+='<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px">';
     h+='<input class="chk-paid" type="checkbox" '+(allPaid?'checked':'')+' onchange="markAllPaid(this.checked)"> Oplacone: wszystkie';
@@ -373,7 +372,10 @@ function buildTable(rows,title,color,isCosts){
 
   // Table
   h+='<div class="tw"><table><thead><tr>';
-  h+='<th style="width:30px;text-align:center"><input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+idsJson+')" title="Zaznacz wszystkie"></th>';
+  h+='<th style="width:36px;text-align:center">';
+  h+='<label title="Zaznacz / odznacz wszystkie" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">';
+  h+='<input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+idsJson+')">';
+  h+='</label></th>';
   h+='<th>Data</th><th>Firma</th><th>Nr / Kontrahent</th>';
   h+='<th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th>';
   h+='<th style="text-align:center">Opl.</th><th></th>';

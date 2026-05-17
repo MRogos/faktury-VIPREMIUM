@@ -351,11 +351,14 @@ function buildTable(rows,title,color,isCosts){
   // Header
   h+='<div class="tsec-hd">';
   h+='<span style="color:'+color+';font-weight:600;font-size:13px">'+title+' <span style="opacity:.6;font-size:12px;font-weight:400">('+rows.length+')</span></span>';
+  h+='<div style="display:flex;align-items:center;gap:10px">';
+  h+='<button class="sm" onclick="selAll(true,'+idsJson+')" style="font-size:11px">&#9745; Zaznacz wszystkie</button>';
   if(isCosts){
     h+='<label style="font-size:12px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px">';
     h+='<input class="chk-paid" type="checkbox" '+(allPaid?'checked':'')+' onchange="markAllPaid(this.checked)"> Oplacone: wszystkie';
     h+='</label>';
   }
+  h+='</div>';
   h+='</div>';
 
   // Action bar

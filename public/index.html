@@ -242,6 +242,8 @@ var MN=['Styczen','Luty','Marzec','Kwiecien','Maj','Czerwiec','Lipiec','Sierpien
 var VATS=[0,5,8,23];
 
 var FLEET=['DW7MP83','DW6RS03','DWLTA36','WPR8462U','WGM9808M','DSWTF32','DSR80719','DSR80682','DSR80874'];
+var PLATE_ALIASES={'DW1VT08':'DSR80719','DW1WN03':'DSR80874','DW5VX38':'DSR80682'};
+function normalizePlate(plate){var p=(plate||'').toUpperCase().replace(/\s/g,'');return PLATE_ALIASES[p]||p;}
 
 var COST_CATS=[
   {id:'fuel',    label:'Tankowanie',      icon:'⛽'},

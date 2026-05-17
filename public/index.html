@@ -593,6 +593,12 @@ function renderSForm(){
     +'<div class="g2"><div class="fg"><label>Kwota brutto PLN'+(isEUR?' (przeliczona)':'')+'</label><input type="number" id="pbrutto" value="'+(pending.brutto||'')+'" step="0.01" oninput="pending.brutto=parseFloat(this.value)||0;refreshComp()"></div>'
     +'<div class="fg"><label>Stawka VAT</label><select onchange="pending.vatRate=parseInt(this.value);refreshComp()">'+vatOpts+'</select></div></div>'
     +'<div class="comp" id="scomp">'+(isEUR?'<span>Oryginal: <b>'+(pending.bruttoOrig||pending.brutto).toFixed(2)+' '+pending.currency+'</b></span>':'')+'<span>Netto: <b>'+fmt(n)+'</b></span><span>VAT: <b>'+fmt(v)+'</b></span><span>Brutto PLN: <b>'+fmt(pending.brutto)+'</b></span></div>'
+    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
+    +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted)">'
+    +'<input type="checkbox" '+(pending.paid?'checked':'')+' onchange="pending.paid=this.checked" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">'
+    +'<span>Faktura juz <b style="color:var(--accent)">oplacona</b></span>'
+    +'</label>'
+    +'</div>'
     +'<div style="display:flex;gap:8px"><button class="prim" onclick="saveInv()">Zatwierdz i zaksieguj</button><button onclick="cancelScan()">Anuluj</button></div></div>';
 }
 function cancelScan(){pending=null;renderSForm();setMsg('sstatus','','');}

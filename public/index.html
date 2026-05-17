@@ -508,10 +508,7 @@ function sfile(file){
   pending=null;
   g('sform').innerHTML='';
   setMsg('sstatus','<span class="spin">&#8635;</span> AI czyta fakture...','info');
-  var fileData;
-  b64(file)
-  .then(function(data){
-    fileData=data;
+  b64(file).then(function(data){
     var mime=file.type||'application/pdf';
     var block=mime==='application/pdf'
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
@@ -521,9 +518,10 @@ function sfile(file){
       model:'claude-haiku-4-5-20251001',max_tokens:1000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
     })});
-  })
-  .then(function(r){if(!r.ok)throw new Error('API '+r.status);return r.json();})
-  .then(function(data){
+  }).then(function(r){
+    if(!r.ok)throw new Error('API '+r.status);
+    return r.json();
+  }).then(function(data){
     if(!data.content)throw new Error(data.error||'Brak odpowiedzi');
     var txt=data.content.map(function(x){return x.text||'';}).join('').replace(/```json|```/g,'').trim();
     var ai;
@@ -541,29 +539,24 @@ function sfile(file){
       nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:ai.confidence||'medium',bruttoOrig:null,paid:false};
     if(pending.currency!=='PLN'){
       setMsg('sstatus','<span class="spin">&#8635;</span> Pobieram kurs NBP...','info');
-      return fetch('/api/nbp/'+pending.currency+'/'+pending.date)
-      .then(function(r){
+      return fetch('/api/nbp/'+pending.currency+'/'+pending.date).then(function(r){
         if(r.ok){
           return r.json().then(function(nd){
-            pending.nbpRate=nd.rate;
-            pending.nbpDate=nd.date;
-            pending.nbpTable=nd.table||'';
+            pending.nbpRate=nd.rate;pending.nbpDate=nd.date;pending.nbpTable=nd.table||'';
             pending.bruttoOrig=brutto;
             pending.brutto=Math.round(brutto*nd.rate*100)/100;
             pending.nbpInfo=brutto.toFixed(2)+' '+pending.currency+' x '+nd.rate.toFixed(4)+' = '+pending.brutto.toFixed(2)+' PLN (NBP '+nd.date+')';
           });
         }
-      })
-      .catch(function(){});
+      }).catch(function(){});
     }
-  })
-  .then(function(){
+  }).then(function(){
     setMsg('sstatus','Faktura odczytana - sprawdz i zatwierdz','ok');
     renderSForm();
-  })
-  .catch(function(e){setMsg('sstatus','Blad: '+e.message,'err');});
+  }).catch(function(e){
+    setMsg('sstatus','Blad: '+e.message,'err');
+  });
 }
-
 function b64(file){
   return new Promise(function(res,rej){
     var r=new FileReader();

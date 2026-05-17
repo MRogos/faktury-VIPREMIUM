@@ -372,10 +372,12 @@ function buildTable(rows,title,color,isCosts){
 
   // Table
   h+='<div class="tw"><table><thead><tr>';
+  var someSelNotAll=selIds.length>0&&selIds.length<ids.length;
+  var chkId='chk-hd-'+Math.random().toString(36).slice(2,6);
   h+='<th style="width:36px;text-align:center">';
-  h+='<label title="Zaznacz / odznacz wszystkie" style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">';
-  h+='<input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+idsJson+')">';
-  h+='</label></th>';
+  h+='<input class="chk" type="checkbox" id="'+chkId+'" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+idsJson+')" title="Zaznacz wszystkie">';
+  h+='</th>';
+  h+='<script>setTimeout(function(){var el=document.getElementById("'+chkId+'");if(el)el.indeterminate='+someSelNotAll+';},0);<\/script>';
   h+='<th>Data</th><th>Firma</th><th>Nr / Kontrahent</th>';
   h+='<th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th>';
   h+='<th style="text-align:center">Opl.</th><th></th>';

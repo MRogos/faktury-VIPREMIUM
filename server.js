@@ -146,11 +146,11 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
       INSERT INTO invoices (
         id, company, type, num, date, contractor, buyer, description,
         brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date, 
-        nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat, vehicles
+        nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat, vehicles, vehicle_breakdown
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,
-        $15,$16,$17,$18,$19,$20,$21,$22
+        $15,$16,$17,$18,$19,$20,$21,$22,$23
       )
       ON CONFLICT (id) DO UPDATE SET
         company = EXCLUDED.company,

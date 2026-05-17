@@ -1259,7 +1259,7 @@ function renderOverdueAlert(){
     var days=daysOverdue(i);
     var co=COS.find(function(x){return x.id===i.company;});
     h+='<div style="display:flex;justify-content:space-between;font-size:12px;font-family:var(--mono);padding:4px 0;border-bottom:0.5px solid rgba(240,96,96,.15)">'
-      +'<span style="color:var(--muted)">'+(co?co.short:'?')+' &middot; '+(i.contractor||'?').slice(0,30)+'</span>'
+      +'<span style="color:var(--muted)">'+(co?co.short:'?')+' &middot; <b style="color:var(--text)">'+(i.num||'?')+'</b> &middot; '+(i.contractor||'?').slice(0,25)+'</span>'
       +'<span style="color:var(--red)">'+days+' dni &middot; '+fmt(i.brutto)+'</span>'
       +'</div>';
   });

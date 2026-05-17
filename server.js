@@ -49,6 +49,9 @@ async function initDB() {
         paid BOOLEAN DEFAULT FALSE,
         due_date VARCHAR(20),
         note TEXT,
+        cost_cat VARCHAR(20) DEFAULT 'other',
+        vehicles TEXT DEFAULT '[]',
+        vehicle_breakdown TEXT DEFAULT '[]',
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -65,7 +68,10 @@ async function initDB() {
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS confidence VARCHAR(20)",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS buyer VARCHAR(500)",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'PLN'",
-      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_rate INTEGER DEFAULT 0"
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_rate INTEGER DEFAULT 0",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_cat VARCHAR(20) DEFAULT 'other'",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicles TEXT DEFAULT '[]'",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicle_breakdown TEXT DEFAULT '[]'"
     ];
     for (const sql of migrations) {
       await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
@@ -119,6 +125,9 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
       paid: r.paid || false,
       dueDate: r.due_date || null,
       note: r.note || null,
+      costCat: r.cost_cat || 'other',
+      vehicles: JSON.parse(r.vehicles || '[]'),
+      vehicleBreakdown: JSON.parse(r.vehicle_breakdown || '[]'),
     }));
     res.json(rows);
   } catch (e) {
@@ -137,11 +146,11 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
       INSERT INTO invoices (
         id, company, type, num, date, contractor, buyer, description,
         brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date, 
-        nbp_table, nbp_info, confidence, paid, due_date, note
+        nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat, vehicles
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,
-        $15,$16,$17,$18,$19,$20
+        $15,$16,$17,$18,$19,$20,$21,$22
       )
       ON CONFLICT (id) DO UPDATE SET
         company = EXCLUDED.company,
@@ -161,14 +170,18 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
         nbp_info = EXCLUDED.nbp_info,
         confidence = EXCLUDED.confidence,
         due_date = EXCLUDED.due_date,
-        note = EXCLUDED.note
+        note = EXCLUDED.note,
+        cost_cat = EXCLUDED.cost_cat,
+        vehicles = EXCLUDED.vehicles,
+        vehicle_breakdown = EXCLUDED.vehicle_breakdown
     `, [
       i.id, i.company || 'vt', i.type || 'buy', i.num || '', i.date || '',
       i.contractor || '', i.buyer || '', i.description || '',
       i.brutto || 0, i.bruttoOrig || null, i.vatRate || 0,
       i.currency || 'PLN', i.nbpRate || null, i.nbpDate || null,
       i.nbpTable || null, i.nbpInfo || null, i.confidence || 'medium',
-      i.paid || false, i.dueDate || null, i.note || null
+      i.paid || false, i.dueDate || null, i.note || null,
+      i.costCat || 'other', JSON.stringify(i.vehicles || []), JSON.stringify(i.vehicleBreakdown || [])
     ]);
     
     console.log('Saved invoice:', i.id, i.num, i.brutto);

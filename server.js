@@ -6,6 +6,15 @@ const { Pool } = require('pg');
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Disable caching for all API routes
+app.use('/api', function(req, res, next) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 app.use(express.static('public'));
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;

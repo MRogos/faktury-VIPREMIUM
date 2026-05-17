@@ -289,7 +289,7 @@ function stats(coId){
   var b=inv.filter(function(i){return i.type==='buy';});
   var gI=0,gO=0,nI=0,nO=0,vI=0,vO=0,pO=0,uO=0;
   s.forEach(function(i){gI+=i.brutto;nI+=calcN(i.brutto,i.vatRate);vI+=calcV(i.brutto,i.vatRate);});
-  b.forEach(function(i){gO+=i.brutto;nO+=calcN(i.brutto,i.vatRate);vO+=calcV(i.brutto,i.vatRate);if(i.paid)pO+=i.brutto;else uO+=i.brutto;});
+  b.forEach(function(i){gO+=i.brutto;nO+=calcNettoForInv(i);vO+=calcVatForInv(i);if(i.paid)pO+=i.brutto;else uO+=i.brutto;});
   return{gI:gI,gO:gO,nI:nI,nO:nO,vI:vI,vO:vO,vatDue:vI-vO,bal:nI-nO,cnt:inv.length,pO:pO,uO:uO};
 }
 
@@ -769,6 +769,48 @@ function renderDash(){
       }
     });
   });
+}
+
+// Event delegation for table checkboxes and buttons
+function onChkChange(e){
+  var el=e.target;
+  var id=el.getAttribute('data-id');
+  var action=el.getAttribute('data-action');
+  if(action==='sel') toggleSel(id,el.checked);
+  else if(action==='paid') togglePaid(id,el.checked);
+}
+function onBtnClick(e){
+  var el=e.currentTarget||e.target;
+  var id=el.getAttribute('data-id');
+  var action=el.getAttribute('data-action');
+  if(action==='del') delInv(id);
+}
+function toggleFirm(el){
+  var id=el.getAttribute('data-co');
+  expF[id]=!expF[id];
+  renderFirms();
+}
+
+// === ALGORYTM 50% KOSZTOW - AUTA OSOBOWE ===
+// DW7RE52 i DX28899 - odliczamy tylko 50% kosztow VAT
+var HALF_VAT_KEYWORDS = ['DW7RE52','DX28899'];
+
+function isHalfVatInv(inv){
+  var txt = ((inv.description||'')+(inv.contractor||'')+(inv.num||'')).toUpperCase();
+  return HALF_VAT_KEYWORDS.some(function(kw){ return txt.indexOf(kw) >= 0; });
+}
+
+// Nadpisuje calcV dla faktur z autami osobowymi
+function calcVatForInv(inv){
+  var v = calcV(inv.brutto, inv.vatRate);
+  return isHalfVatInv(inv) ? v * 0.5 : v;
+}
+function calcNettoForInv(inv){
+  if(!isHalfVatInv(inv)) return calcN(inv.brutto, inv.vatRate);
+  // 50% VAT = można odliczyć połowę, reszta to koszt
+  var netto = calcN(inv.brutto, inv.vatRate);
+  var vat = calcV(inv.brutto, inv.vatRate);
+  return netto + vat * 0.5; // koszt netto + nieodliczony VAT
 }
 
 window.onload=function(){

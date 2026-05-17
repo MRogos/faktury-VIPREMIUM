@@ -200,12 +200,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
       <div class="card">
         <div style="font-weight:600;margin-bottom:12px">2. Wrzuc plik</div>
-        <div class="drop" onclick="document.getElementById('ifi').click()" ondragover="event.preventDefault();this.classList.add('ov')" ondragleave="this.classList.remove('ov')" ondrop="this.classList.remove('ov');idrop(event)">
+        <div class="drop" onclick="document.getElementById('ifi').click()" ondragover="event.preventDefault();this.classList.add('ov')" ondragleave="this.classList.remove('ov')" ondrop="this.classList.remove('ov');idrop(event)" multiple>
           <span style="font-size:28px;display:block;margin-bottom:8px">&#128202;</span>
           <b>Wrzuc plik tutaj</b>
-          <p>XLSX z KSeF, zestawienie BoxTMS lub PDF</p>
+          <p>XLSX z KSeF, zestawienie BoxTMS lub PDF &mdash; mozesz wybrac wiele plikow naraz</p>
         </div>
-        <input type="file" id="ifi" accept=".xlsx,.xls,.pdf" onchange="ifile(this.files[0])">
+        <input type="file" id="ifi" accept=".xlsx,.xls,.pdf" multiple onchange="ifiles(this.files)">
       </div>
       <div id="ipreview"></div>
     </div>
@@ -632,14 +632,118 @@ function saveInv(){
   .catch(function(e){setMsg('sstatus','Blad: '+e.message,'err');});
 }
 
-function idrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)ifile(f);}
+function idrop(e){e.preventDefault();ifiles(e.dataTransfer.files);}
+
+function ifiles(files){
+  if(!files||!files.length)return;
+  if(files.length===1){
+    var f=files[0];
+    var name=f.name.toLowerCase();
+    g('ipreview').innerHTML='';
+    if(name.slice(-4)==='.pdf'||f.type==='application/pdf')impPDF(f);
+    else impXLSX(f);
+    return;
+  }
+  // Multiple files - process all
+  setMsg('istatus','<span class="spin">&#8635;</span> Czytam '+files.length+' plikow...','info');
+  g('ipreview').innerHTML='';
+  var allParsed=[];
+  var remaining=files.length;
+  function tryFinish(){
+    if(--remaining===0){
+      if(!allParsed.length){setMsg('istatus','Blad: brak faktur we wszystkich plikach','err');return;}
+      _imp=allParsed;
+      var paid=allParsed.filter(function(r){return r.paid;}).length;
+      var eur=allParsed.filter(function(r){return r.currency!=='PLN';}).length;
+      setMsg('istatus','Odczytano lacznie '+allParsed.length+' faktur z '+files.length+' plikow'+(eur?' ('+eur+' walutowych)':'')+(paid?', '+paid+' oplaconych':''),'ok');
+      showImpPreview(allParsed);
+    }
+  }
+  Array.from(files).forEach(function(f){
+    var name=f.name.toLowerCase();
+    if(name.slice(-4)==='.pdf'||f.type==='application/pdf'){
+      impPDFsilent(f,function(parsed){allParsed=allParsed.concat(parsed);tryFinish();});
+    } else {
+      impXLSXsilent(f,function(parsed){allParsed=allParsed.concat(parsed);tryFinish();});
+    }
+  });
+}
+
 function ifile(file){
   if(!file)return;
-  g('ipreview').innerHTML='';
-  var name=file.name.toLowerCase();
-  if(name.slice(-4)==='.pdf'||file.type==='application/pdf')impPDF(file);
-  else impXLSX(file);
+  ifiles([file]);
 }
+function impXLSXsilent(file, cb){
+  file.arrayBuffer().then(function(ab){
+    var wb=XLSX.read(ab,{type:'array',cellDates:true});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){cb([]);return;}
+    var keys=Object.keys(rows[0]);
+    function fc(){var p=Array.prototype.slice.call(arguments);return keys.find(function(k){return p.some(function(x){return k.toLowerCase().indexOf(x.toLowerCase())>=0;});})||null;}
+    var cNum=fc('Numer FV','numer faktury','nr fv');
+    var cDate=fc('Wystawiono','data wystawienia','data');
+    var cCont=fc('Kontrahent','nazwa');
+    var cNetto=fc('Netto');
+    var cVat=fc('Vat PLN','VAT PLN','vat pln');
+    var cBrutto=fc('Brutto');
+    var cCurr=fc('Waluta');
+    var cKurs=fc('Kurs');
+    var cPoz=fc('Pozostalo','Pozostało');
+    var cZlec=fc('Nr. zlecenia','nr zlecenia');
+    var company=g('ico').value,type=g('itype').value;
+    var parsed=rows.map(function(r){
+      var rawDate=cDate?r[cDate]:'';
+      var dateStr='';
+      if(rawDate instanceof Date)dateStr=rawDate.toISOString().slice(0,10);
+      else if(typeof rawDate==='string'&&rawDate.length>=10)dateStr=rawDate.slice(0,10);
+      var brutto=parseFloat(String(r[cBrutto]||'').replace(',','.'))||0;
+      var netto=parseFloat(String(r[cNetto]||'').replace(',','.'))||0;
+      var vatPLN=parseFloat(String(r[cVat]||'').replace(',','.'))||0;
+      var kurs=cKurs?(parseFloat(String(r[cKurs]||'').replace(',','.'))||1):1;
+      var curr=cCurr?String(r[cCurr]||'PLN').trim():'PLN';
+      var poz=cPoz?parseFloat(String(r[cPoz]||'').replace(',','.')):null;
+      var isPaid=poz!==null&&!isNaN(poz)&&poz===0&&brutto>0;
+      var desc=cZlec?String(r[cZlec]||'').trim():'';
+      var cTermin=fc('Termin platnosci','Termin zapłaty','termin','due date');
+      var rawTermin=cTermin?r[cTermin]:'';
+      var terminStr='';
+      if(rawTermin instanceof Date)terminStr=rawTermin.toISOString().slice(0,10);
+      else if(typeof rawTermin==='string'&&rawTermin.length>=10)terminStr=rawTermin.slice(0,10);
+      var vatRate=0;
+      if(vatPLN>0&&netto>0){var c2=Math.round((vatPLN/netto)*100);if(VATS.indexOf(c2)>=0)vatRate=c2;}
+      else if(brutto>0&&netto>0&&curr==='PLN'){var c3=Math.round(((brutto/netto)-1)*100);if(VATS.indexOf(c3)>=0)vatRate=c3;}
+      var bruttoPLN=brutto,bruttoOrig=null,nbpRate=null,nbpInfo=null;
+      if(curr!=='PLN'&&kurs>1){bruttoOrig=brutto;bruttoPLN=Math.round(brutto*kurs*100)/100;nbpRate=kurs;nbpInfo=brutto.toFixed(2)+' '+curr+' x '+kurs.toFixed(4)+' = '+bruttoPLN.toFixed(2)+' PLN (kurs z FV)';}
+      return{id:'x'+uid(),company:company,type:type,num:String(r[cNum]||'').trim(),date:dateStr,contractor:String(r[cCont]||'').trim(),buyer:'',description:desc,brutto:bruttoPLN,bruttoOrig:bruttoOrig,vatRate:vatRate,currency:curr,nbpRate:nbpRate,nbpDate:dateStr,nbpTable:'z faktury',nbpInfo:nbpInfo,confidence:'high',paid:isPaid,dueDate:terminStr||null,note:null};
+    }).filter(function(r){return r.brutto>0;});
+    cb(parsed);
+  }).catch(function(){cb([]);});
+}
+
+function impPDFsilent(file, cb){
+  b64(file).then(function(data){
+    var company=g('ico').value,type=g('itype').value;
+    var sys='Jestes systemem do odczytu zestawien faktur. Zwroc TYLKO JSON array:\n[{"num":"numer","date":"YYYY-MM-DD","contractor":"kontrahent","netto":liczba,"vat":liczba,"brutto":liczba,"currency":"PLN"}]\nKazda faktura = osobny obiekt. Odczytaj WSZYSTKIE. Tylko JSON array.';
+    return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
+      model:'claude-haiku-4-5-20251001',max_tokens:4000,system:sys,
+      messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}},{type:'text',text:'Odczytaj wszystkie faktury, zwroc JSON array.'}]}]
+    })});
+  }).then(function(r){return r.json();})
+  .then(function(data){
+    if(!data.content){cb([]);return;}
+    var txt=data.content.map(function(x){return x.text||'';}).join('').replace(/```json|```/g,'').trim();
+    var rows=JSON.parse(txt);
+    var company=g('ico').value,type=g('itype').value;
+    var parsed=rows.map(function(r){
+      var brutto=parseFloat(r.brutto)||0,netto=parseFloat(r.netto)||0;
+      var vatRate=0;if(brutto>0&&netto>0){var c2=Math.round(((brutto/netto)-1)*100);if(VATS.indexOf(c2)>=0)vatRate=c2;}
+      return{id:'p'+uid(),company:company,type:type,num:String(r.num||'').trim(),date:String(r.date||'').slice(0,10),contractor:String(r.contractor||'').trim(),buyer:'',description:'',brutto:brutto,bruttoOrig:null,vatRate:vatRate,currency:String(r.currency||'PLN').trim(),nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:'medium',paid:false,dueDate:null,note:null};
+    }).filter(function(r){return r.brutto>0;});
+    cb(parsed);
+  }).catch(function(){cb([]);});
+}
+
 function impXLSX(file){
   setMsg('istatus','<span class="spin">&#8635;</span> Czytam plik XLSX...','info');
   file.arrayBuffer().then(function(ab){

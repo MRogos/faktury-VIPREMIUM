@@ -361,14 +361,15 @@ function buildTable(rows,title,color,isCosts){
   h+='</div>';
 
   // Action bar
+  h+='<div class="abar" style="background:rgba(255,255,255,.03);border-bottom:0.5px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:10px;font-size:13px">';
+  h+='<button class="sm prim" onclick="selAll(true,'+idsJson+')">&#9745; Zaznacz wszystkie</button>';
   if(selIds.length>0){
-    h+='<div class="abar">';
-    h+='<span style="color:var(--red);font-weight:600">Zaznaczono: '+selIds.length+'</span>';
-    if(isCosts){h+='<button class="sm prim" onclick="markSelPaid()">Oznacz oplacone</button>';}
+    h+='<span style="color:var(--red);font-weight:600;margin-left:4px">Zaznaczono: '+selIds.length+'</span>';
+    if(isCosts){h+='<button class="sm" style="background:var(--accent);color:#111;border-color:var(--accent)" onclick="markSelPaid()">&#10003; Oznacz oplacone</button>';}
     h+='<button class="sm del" onclick="delSel()">&#128465; Usun zaznaczone ('+selIds.length+')</button>';
-    h+='<button class="sm" onclick="sel={};renderLedger()">Odznacz wszystko</button>';
-    h+='</div>';
+    h+='<button class="sm" onclick="sel={};renderLedger()">&#10005; Odznacz wszystko</button>';
   }
+  h+='</div>';
 
   // Table
   h+='<div class="tw"><table><thead><tr>';

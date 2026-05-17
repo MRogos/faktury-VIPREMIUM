@@ -403,8 +403,10 @@ function buildTable(rows,title,color,isCosts){
 // FIRMS
 function renderFirms(){
   g('fsub').textContent=coLabel()+' - '+periodLabel();
-  var prefix=selYear+(selMonth?'-'+selMonth:'');
+  // Auto-expand all firms
   var toShow=selCo==='all'?COS:COS.filter(function(c){return c.id===selCo;});
+  toShow.forEach(function(c){if(expF[c.id]===undefined)expF[c.id]=true;});
+  var prefix=selYear+(selMonth?'-'+selMonth:'');
   var h='';
   toShow.forEach(function(c){
     var s=stats(c.id);

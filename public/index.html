@@ -553,13 +553,19 @@ function sfile(file){
     // Auto-detect cost category and vehicles from contractor/description
     var autoVehicles=[];
     var rawText=(ai.raw_text||'')+(ai.description||'')+(ai.contractor||'');
-    FLEET.forEach(function(v){if(rawText.toUpperCase().indexOf(v)>=0)autoVehicles.push(v);});
+    var rawUpper=rawText.toUpperCase();
+    FLEET.forEach(function(v){if(rawUpper.indexOf(v)>=0)autoVehicles.push(v);});
+    Object.keys(PLATE_ALIASES).forEach(function(old){
+      if(rawUpper.indexOf(old)>=0){
+        var newPlate=PLATE_ALIASES[old];
+        if(autoVehicles.indexOf(newPlate)<0)autoVehicles.push(newPlate);
+      }
+    });
     // Use AI vehicle_breakdown if available (fuel/ferry invoices)
     var vehicleBreakdown=[];
     if(ai.vehicle_breakdown&&ai.vehicle_breakdown.length){
       ai.vehicle_breakdown.forEach(function(vb){
-        var plate=(vb.plate||'').toUpperCase().replace(/\s/g,'');
-        // Match to fleet
+        var plate=normalizePlate(vb.plate||'');
         var match=FLEET.find(function(f){return plate.indexOf(f)>=0||f.indexOf(plate)>=0;});
         if(match){
           vehicleBreakdown.push({plate:match,amount:parseFloat(vb.amount)||0});

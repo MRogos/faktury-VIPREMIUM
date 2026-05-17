@@ -506,7 +506,7 @@ function sfile(file){
     var block=mime==='application/pdf'
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
-    var sys='Jestes systemem OCR do polskich faktur VAT. Zwroc TYLKO JSON bez markdown:\n{"num":"numer faktury","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba,"netto":liczba,"vat_rate":liczba,"currency":"PLN","description":"opis max 80 znakow","raw_text":"pierwsze 150 znakow","confidence":"high/medium/low"}\ndue_date = termin platnosci z faktury (szukaj: termin platnosci, platne do, due date, zaplacic do). type=sale gdy faktura od firmy Vipremium, buy=zakup zewnetrzny. Jesli brak wstaw null. Tylko JSON.';
+    var sys='Jestes systemem OCR do faktur VAT (polskich i zagranicznych). Zwroc TYLKO JSON bez markdown:\n{"num":"numer faktury","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca/sprzedawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_w_walucie_faktury,"netto":liczba_w_walucie_faktury,"vat_rate":liczba_procent,"currency":"kod_waluty","description":"opis max 80 znakow","raw_text":"pierwsze 150 znakow","confidence":"high/medium/low"}\nWAZNE: vat_rate = DOKLADNA stawka z faktury (np. 20 dla FR, 19 dla DE, 23 dla PL). Nie zgaduj - odczytaj z dokumentu. brutto/netto = kwoty w walucie faktury (EUR/GBP/PLN). due_date = termin platnosci (Payment terms, Terme de paiement, Zahlungsziel). type=sale gdy faktura od firmy Vipremium, buy=zakup zewnetrzny. Jesli brak wstaw null. Tylko JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',max_tokens:1000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -562,12 +562,24 @@ function renderSForm(){
   var n=calcN(pending.brutto,pending.vatRate),v=calcV(pending.brutto,pending.vatRate);
   var isEUR=pending.currency!=='PLN';
   var nbp='';
+  var isForeignFuel = isForeignVatInv(pending);
   if(isEUR){
     nbp='<div class="nbpb"><b>Przeliczenie walutowe</b><br>';
     nbp+='Waluta: '+pending.currency+' - Oryginal: '+(pending.bruttoOrig||pending.brutto).toFixed(2)+' '+pending.currency+'<br>';
     if(pending.nbpRate){nbp+='Kurs NBP z '+pending.nbpDate+': '+pending.nbpRate.toFixed(4)+' - Przeliczone: '+pending.brutto.toFixed(2)+' PLN';}
     else{nbp+='Wpisz kurs recznie: <input type="number" step="0.0001" placeholder="4.2150" id="nbpm" style="width:100px;padding:4px 8px;background:var(--bg3);border:0.5px solid var(--border);border-radius:6px;color:var(--text);font-size:12px" oninput="manualRate(this.value)"> PLN/'+pending.currency+' <a href="https://www.nbp.pl" target="_blank" style="color:var(--accent);font-size:11px">NBP.pl</a>';}
     nbp+='</div>';
+  }
+  if(isForeignFuel){
+    var vatOrig = calcV(pending.bruttoOrig||pending.brutto, pending.vatRate);
+    var vatPLN = vatOrig * (pending.nbpRate||1);
+    nbp += '<div style="background:rgba(96,168,240,.1);border:0.5px solid rgba(96,168,240,.3);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.8;color:#60a8f0">'
+      +'<b>&#127758; Faktura z VAT zagranicznym (VAT-REF)</b><br>'
+      +'Dostawca: '+pending.contractor+' &mdash; paliwo zagraniczne<br>'
+      +'Koszt ksiegowy = NETTO: <b>'+(pending.bruttoOrig?calcN(pending.bruttoOrig,pending.vatRate).toFixed(2)+' '+pending.currency+' = ':'')+calcN(pending.brutto,pending.vatRate).toFixed(2)+' PLN</b><br>'
+      +'VAT do odzyskania (VAT-REF): <b>'+vatOrig.toFixed(2)+' '+(pending.currency||'EUR')+' &asymp; '+vatPLN.toFixed(2)+' PLN</b><br>'
+      +'<span style="opacity:.7">VAT nie wchodzi do rozliczenia PL &mdash; odzyskiwany osobno kwartalnie</span>'
+      +'</div>';
   }
   var coOpts=COS.map(function(c){return '<option value="'+c.id+'"'+(pending.company===c.id?' selected':'')+'>'+c.short+' - '+c.name+'</option>';}).join('');
   var vatOpts=VATS.map(function(r){return '<option value="'+r+'"'+(pending.vatRate===r?' selected':'')+'>'+r+'%</option>';}).join('');

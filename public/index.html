@@ -478,7 +478,10 @@ function renderFirms(){
         fi.forEach(function(i){
           h+='<tr><td>'+(i.date||'-')+'</td>';
           h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
-          h+='<td style="font-family:var(--font)">'+(i.num?i.num+' - ':'')+'<span style="opacity:.6">'+(i.contractor||'-').slice(0,38)+'</span></td>';
+          h+='<td style="font-family:var(--font);max-width:220px">'
+            +(i.num?'<div style="font-weight:600;color:var(--text);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
+            +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||'-').slice(0,38)+'</div>'
+            +'</td>';
           h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
           h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
           h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';

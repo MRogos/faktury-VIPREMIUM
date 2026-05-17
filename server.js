@@ -1,51 +1,49 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 const { Pool } = require('pg');
+const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 
 const app = express();
+
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// Disable caching for all API routes
-app.use('/api', function(req, res, next) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+// No cache for API
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
   next();
 });
 
 app.use(express.static('public'));
 
-const API_KEY = process.env.ANTHROPIC_API_KEY;
-const DATABASE_URL = process.env.DATABASE_URL;
-const APP_PASSWORD = process.env.APP_PASSWORD || 'vipremium2026';
-const WORKER_PASSWORD = process.env.WORKER_PASSWORD || 'pracownik2026';
-
 const pool = new Pool({
-  connectionString: DATABASE_URL,
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
+const APP_PASSWORD = process.env.APP_PASSWORD || 'vipremium2026';
+const WORKER_PASSWORD = process.env.WORKER_PASSWORD || 'pracownik2026';
+
+// Init DB
 async function initDB() {
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS invoices (
-        id VARCHAR(50) PRIMARY KEY,
+        id VARCHAR(100) PRIMARY KEY,
         company VARCHAR(10),
         type VARCHAR(10),
-        num VARCHAR(100),
+        num VARCHAR(200),
         date VARCHAR(20),
-        contractor VARCHAR(255),
-        buyer VARCHAR(255),
+        contractor VARCHAR(500),
+        buyer VARCHAR(500),
         description TEXT,
-        brutto NUMERIC(12,2),
-        brutto_orig NUMERIC(12,2),
-        vat_rate INTEGER,
-        currency VARCHAR(10),
-        nbp_rate NUMERIC(10,4),
+        brutto NUMERIC(14,2),
+        brutto_orig NUMERIC(14,2),
+        vat_rate INTEGER DEFAULT 0,
+        currency VARCHAR(10) DEFAULT 'PLN',
+        nbp_rate NUMERIC(12,6),
         nbp_date VARCHAR(20),
-        nbp_table VARCHAR(50),
+        nbp_table VARCHAR(100),
         nbp_info TEXT,
         confidence VARCHAR(20),
         paid BOOLEAN DEFAULT FALSE,
@@ -54,96 +52,119 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    // Add new columns if they don't exist (migration)
-    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date VARCHAR(20)").catch(()=>{});
-    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS note TEXT").catch(()=>{});
-    console.log('Baza danych gotowa');
+    // Migrations
+    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date VARCHAR(20)").catch(() => {});
+    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS note TEXT").catch(() => {});
+    console.log('DB ready');
   } catch (e) {
-    console.error('Błąd inicjalizacji bazy:', e.message);
+    console.error('DB init error:', e.message);
   }
 }
 initDB();
 
-// Auth middleware
 function requireAuth(req, res, next) {
   const token = req.headers['x-auth-token'];
-  if (token !== APP_PASSWORD) {
-    return res.status(401).json({ error: 'Brak autoryzacji' });
+  if (token === APP_PASSWORD || token === WORKER_PASSWORD) {
+    next();
+  } else {
+    res.status(401).json({ error: 'Unauthorized' });
   }
-  next();
 }
 
-// Login
+// AUTH
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
-  if (password === APP_PASSWORD) {
-    res.json({ ok: true, role: 'owner' });
-  } else if (password === WORKER_PASSWORD) {
-    res.json({ ok: true, role: 'worker' });
-  } else {
-    res.json({ ok: false });
-  }
+  if (password === APP_PASSWORD) return res.json({ ok: true, role: 'owner' });
+  if (password === WORKER_PASSWORD) return res.json({ ok: true, role: 'worker' });
+  res.json({ ok: false });
 });
 
-// Pobierz wszystkie faktury
+// GET invoices
 app.get('/api/invoices', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM invoices ORDER BY created_at DESC');
-    const invoices = result.rows.map(r => ({
-      id: r.id, company: r.company, type: r.type, num: r.num, date: r.date,
-      contractor: r.contractor, buyer: r.buyer, description: r.description,
-      brutto: parseFloat(r.brutto), bruttoOrig: parseFloat(r.brutto_orig) || null,
-      vatRate: r.vat_rate, currency: r.currency,
-      nbpRate: parseFloat(r.nbp_rate) || null, nbpDate: r.nbp_date,
-      nbpTable: r.nbp_table, nbpInfo: r.nbp_info, confidence: r.confidence,
+    const result = await pool.query('SELECT * FROM invoices ORDER BY date DESC, created_at DESC');
+    const rows = result.rows.map(r => ({
+      id: r.id,
+      company: r.company,
+      type: r.type,
+      num: r.num,
+      date: r.date,
+      contractor: r.contractor,
+      buyer: r.buyer,
+      description: r.description,
+      brutto: parseFloat(r.brutto) || 0,
+      bruttoOrig: r.brutto_orig ? parseFloat(r.brutto_orig) : null,
+      vatRate: parseInt(r.vat_rate) || 0,
+      currency: r.currency || 'PLN',
+      nbpRate: r.nbp_rate ? parseFloat(r.nbp_rate) : null,
+      nbpDate: r.nbp_date,
+      nbpTable: r.nbp_table,
+      nbpInfo: r.nbp_info,
+      confidence: r.confidence,
+      paid: r.paid || false,
+      dueDate: r.due_date || null,
+      note: r.note || null,
     }));
-    res.json(invoices);
+    res.json(rows);
   } catch (e) {
+    console.error('GET invoices error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// Zapisz fakturę
+// POST invoice
 app.post('/api/invoices', requireAuth, async (req, res) => {
   try {
     const i = req.body;
+    if (!i.id) return res.status(400).json({ error: 'Missing id' });
+    
     await pool.query(`
-      INSERT INTO invoices (id, company, type, num, date, contractor, buyer, description,
-        brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date, nbp_table, nbp_info, confidence, due_date, note)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-      ON CONFLICT (id) DO UPDATE SET note=EXCLUDED.note, due_date=EXCLUDED.due_date, paid=EXCLUDED.paid
-    `, [i.id, i.company, i.type, i.num, i.date, i.contractor, i.buyer, i.description,
-        i.brutto, i.bruttoOrig, i.vatRate, i.currency, i.nbpRate, i.nbpDate, i.nbpTable, i.nbpInfo, i.confidence,
-        i.dueDate||null, i.note||null]);
+      INSERT INTO invoices (
+        id, company, type, num, date, contractor, buyer, description,
+        brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date, 
+        nbp_table, nbp_info, confidence, paid, due_date, note
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,
+        $9,$10,$11,$12,$13,$14,
+        $15,$16,$17,$18,$19,$20
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        company = EXCLUDED.company,
+        type = EXCLUDED.type,
+        num = EXCLUDED.num,
+        date = EXCLUDED.date,
+        contractor = EXCLUDED.contractor,
+        buyer = EXCLUDED.buyer,
+        description = EXCLUDED.description,
+        brutto = EXCLUDED.brutto,
+        brutto_orig = EXCLUDED.brutto_orig,
+        vat_rate = EXCLUDED.vat_rate,
+        currency = EXCLUDED.currency,
+        nbp_rate = EXCLUDED.nbp_rate,
+        nbp_date = EXCLUDED.nbp_date,
+        nbp_table = EXCLUDED.nbp_table,
+        nbp_info = EXCLUDED.nbp_info,
+        confidence = EXCLUDED.confidence,
+        due_date = EXCLUDED.due_date,
+        note = EXCLUDED.note
+    `, [
+      i.id, i.company || 'vt', i.type || 'buy', i.num || '', i.date || '',
+      i.contractor || '', i.buyer || '', i.description || '',
+      i.brutto || 0, i.bruttoOrig || null, i.vatRate || 0,
+      i.currency || 'PLN', i.nbpRate || null, i.nbpDate || null,
+      i.nbpTable || null, i.nbpInfo || null, i.confidence || 'medium',
+      i.paid || false, i.dueDate || null, i.note || null
+    ]);
+    
+    console.log('Saved invoice:', i.id, i.num, i.brutto);
     res.json({ ok: true });
   } catch (e) {
+    console.error('POST invoice error:', e.message, e.detail);
     res.status(500).json({ error: e.message });
   }
 });
 
-// Zaktualizuj notatkę
-app.patch('/api/invoices/:id/note', requireAuth, async (req, res) => {
-  try {
-    const { note } = req.body;
-    await pool.query('UPDATE invoices SET note = $1 WHERE id = $2', [note, req.params.id]);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Zaktualizuj termin płatności
-app.patch('/api/invoices/:id/due', requireAuth, async (req, res) => {
-  try {
-    const { dueDate } = req.body;
-    await pool.query('UPDATE invoices SET due_date = $1 WHERE id = $2', [dueDate, req.params.id]);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Oznacz fakturę jako opłaconą
+// PATCH paid
 app.patch('/api/invoices/:id/paid', requireAuth, async (req, res) => {
   try {
     const { paid } = req.body;
@@ -154,7 +175,29 @@ app.patch('/api/invoices/:id/paid', requireAuth, async (req, res) => {
   }
 });
 
-// Usuń fakturę
+// PATCH note
+app.patch('/api/invoices/:id/note', requireAuth, async (req, res) => {
+  try {
+    const { note } = req.body;
+    await pool.query('UPDATE invoices SET note = $1 WHERE id = $2', [note, req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PATCH due date
+app.patch('/api/invoices/:id/due', requireAuth, async (req, res) => {
+  try {
+    const { dueDate } = req.body;
+    await pool.query('UPDATE invoices SET due_date = $1 WHERE id = $2', [dueDate, req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE invoice
 app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM invoices WHERE id = $1', [req.params.id]);
@@ -164,50 +207,27 @@ app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Proxy Anthropic
+// SCAN proxy
 app.post('/api/scan', requireAuth, async (req, res) => {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(req.body),
     });
     const data = await response.json();
-    if (!response.ok) return res.status(response.status).json({ error: data.error?.message, full: data });
+    if (!response.ok) return res.status(response.status).json(data);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Export faktur do CSV
-app.get('/api/export/csv', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM invoices ORDER BY date DESC');
-    const rows = result.rows;
-    const headers = ['ID','Firma','Typ','Numer','Data','Kontrahent','Nabywca','Opis','Brutto PLN','Brutto oryg','Stawka VAT','Waluta','Kurs NBP','Data NBP','Termin platnosci','Notatka','Oplacona'];
-    const csv = [headers.join(';')].concat(rows.map(r => [
-      r.id, r.company, r.type, r.num||'', r.date||'', 
-      (r.contractor||'').replace(/;/g,','), (r.buyer||'').replace(/;/g,','),
-      (r.description||'').replace(/;/g,','),
-      r.brutto, r.brutto_orig||'', r.vat_rate||0, r.currency||'PLN',
-      r.nbp_rate||'', r.nbp_date||'', r.due_date||'',
-      (r.note||'').replace(/;/g,',').replace(/\n/g,' '),
-      r.paid?'TAK':'NIE'
-    ].join(';'))).join('\n');
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="faktury-vipremium.csv"');
-    res.send('\uFEFF' + csv); // BOM for Excel
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Proxy NBP
+// NBP proxy
 app.get('/api/nbp/:currency/:date', async (req, res) => {
   const { currency, date } = req.params;
   const d = new Date(date);
@@ -219,12 +239,38 @@ app.get('/api/nbp/:currency/:date', async (req, res) => {
       const r = await fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${currency}/${ds}/?format=json`);
       if (r.ok) {
         const data = await r.json();
-        return res.json({ rate: data.rates[0].mid, date: data.rates[0].effectiveDate, table: data.rates[0].no });
+        return res.json({
+          rate: data.rates[0].mid,
+          date: data.rates[0].effectiveDate,
+          table: data.rates[0].no
+        });
       }
-    } catch {}
+    } catch (e) {}
   }
-  res.status(404).json({ error: 'Nie znaleziono kursu NBP' });
+  res.status(404).json({ error: 'Kurs NBP nie znaleziony' });
+});
+
+// Export CSV
+app.get('/api/export/csv', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM invoices ORDER BY date DESC');
+    const headers = ['ID','Firma','Typ','Numer','Data','Kontrahent','Opis','Brutto PLN','Brutto orig','Waluta','VAT%','Kurs NBP','Termin','Notatka','Oplacona'];
+    const csv = [headers.join(';')].concat(result.rows.map(r => [
+      r.id, r.company, r.type, (r.num||'').replace(/;/g,','),
+      r.date||'', (r.contractor||'').replace(/;/g,','),
+      (r.description||'').replace(/;/g,','),
+      r.brutto, r.brutto_orig||'', r.currency||'PLN',
+      r.vat_rate||0, r.nbp_rate||'',
+      r.due_date||'', (r.note||'').replace(/;/g,','),
+      r.paid?'TAK':'NIE'
+    ].join(';'))).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="faktury.csv"');
+    res.send('\uFEFF' + csv);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Vipremium server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

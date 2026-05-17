@@ -606,11 +606,29 @@ function refreshComp(){
 }
 function saveInv(){
   if(!pending||!pending.brutto||pending.brutto<=0){alert('Podaj kwote brutto!');return;}
+
+  // Sprawdz duplikat po numerze faktury + firma
+  if(pending.num && pending.num.trim() !== ''){
+    var dup = invs.find(function(x){
+      return x.num && x.num.trim().toLowerCase() === pending.num.trim().toLowerCase()
+          && x.company === pending.company;
+    });
+    if(dup){
+      if(!confirm('Faktura o numerze "'+pending.num+'" dla tej firmy juz istnieje ('+dup.date+', '+fmt(dup.brutto)+'). Dodac mimo to?')){
+        return;
+      }
+    }
+  }
+
   var inv=Object.assign({},pending);
   if(!inv.dueDate&&inv.aiDueDate)inv.dueDate=inv.aiDueDate;
   if(inv.currency!=='PLN'&&inv.nbpRate){inv.nbpInfo=(inv.bruttoOrig||inv.brutto).toFixed(2)+' '+inv.currency+' x '+inv.nbpRate.toFixed(4)+' PLN (NBP '+inv.nbpDate+')';}
   fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)})
-  .then(function(){if(!invs.find(function(x){return x.id===inv.id;}))invs.push(inv);pending=null;renderSForm();setMsg('sstatus','Faktura zaksiegowana!','ok');renderTree();})
+  .then(function(r){
+    if(!r.ok){return r.json().then(function(e){throw new Error(e.error||'Blad serwera');});}
+    if(!invs.find(function(x){return x.id===inv.id;}))invs.push(inv);
+    pending=null;renderSForm();setMsg('sstatus','Faktura zaksiegowana!','ok');renderTree();
+  })
   .catch(function(e){setMsg('sstatus','Blad: '+e.message,'err');});
 }
 

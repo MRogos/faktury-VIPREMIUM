@@ -231,7 +231,7 @@ var CNAV=[{id:'all',name:'Wszystkie firmy',icon:'&#127970;'},{id:'vt',name:'VT L
 var MONTHS=['01','02','03','04','05','06','07','08','09','10','11','12'];
 var MN=['Styczen','Luty','Marzec','Kwiecien','Maj','Czerwiec','Lipiec','Sierpien','Wrzesien','Pazdziernik','Listopad','Grudzien'];
 var VATS=[0,5,8,23];
-var invs=[],pending=null,curTab='dash';
+var invs=[],pending=null,curTab='dash',userRole='owner';
 var selCo='all',selYear=String(new Date().getFullYear()),selMonth=String(new Date().getMonth()+1).padStart(2,'0');
 var expCo={all:true},expYr={},expF={};
 var sel={};
@@ -349,6 +349,14 @@ function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')ren
 
 function renderLedger(){
   g('lsub').textContent=coLabel()+' - '+periodLabel();
+  // Add export button to ledger title area
+  var exportBtn=document.querySelector('#page-ledger h1');
+  if(exportBtn&&!exportBtn.querySelector('.exp-btn')){
+    var btn=document.createElement('button');
+    btn.className='sm exp-btn';btn.style.marginLeft='12px';btn.style.fontSize='11px';
+    btn.innerHTML='&#128229; Export CSV';btn.onclick=exportCSV;
+    exportBtn.appendChild(btn);
+  }
   var all=stats('all');
   g('lmetrics').innerHTML='<div class="metrics">'
     +'<div class="metric"><div class="ml">Przychody brutto</div><div class="mv">'+fmt(all.gI)+'</div></div>'
@@ -360,10 +368,11 @@ function renderLedger(){
     +'</div>';
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var filtered=invs.filter(function(i){return (selCo==='all'||i.company===selCo)&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));});
-  if(!filtered.length){g('ltable').innerHTML='<div class="empty">Brak faktur w wybranym okresie</div>';return;}
+  var overdueHtml=userRole==='owner'?renderOverdueAlert():'';
+  if(!filtered.length){g('ltable').innerHTML=overdueHtml+'<div class="empty">Brak faktur w wybranym okresie</div>';return;}
   var sales=filtered.filter(function(i){return i.type==='sale';}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
   var costs=filtered.filter(function(i){return i.type==='buy';}).sort(function(a,b){if(!a.paid&&b.paid)return -1;if(a.paid&&!b.paid)return 1;return new Date(b.date)-new Date(a.date);});
-  g('ltable').innerHTML=buildTable(sales,'&#128200; PRZYCHODY','#60c890',false)+'<div style="height:16px"></div>'+buildTable(costs,'&#128201; KOSZTY','#f06060',true);
+  g('ltable').innerHTML=overdueHtml+buildTable(sales,'&#128200; PRZYCHODY','#60c890',false)+'<div style="height:16px"></div>'+buildTable(costs,'&#128201; KOSZTY','#f06060',true);
 }
 
 function buildTable(rows,title,color,isCosts){
@@ -390,7 +399,7 @@ function buildTable(rows,title,color,isCosts){
   h+='</div>';
   h+='<div class="tw"><table><thead><tr>';
   h+='<th style="width:32px;text-align:center"><input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+varName+')" title="Zaznacz wszystkie"></th>';
-  h+='<th>Data</th><th>Firma</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th>';
+  h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th><th>Notatka</th>';
   h+='</tr></thead><tbody>';
   rows.forEach(function(i){
     var co=COS.find(function(x){return x.id===i.company;});
@@ -802,7 +811,9 @@ function renderDash(){
     +(conMonths.length ? '<div style="position:relative;height:140px"><canvas id="dash-chart-con" role="img" aria-label="Wykres skonsolidowany">Dane skonsolidowane</canvas></div>' : '<div style="text-align:center;padding:2rem;color:var(--muted);font-size:13px">Brak danych zewnetrznych w tym okresie</div>')
     +'</div>';
 
-  g('dash-content').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml;
+  var vatForecast=userRole==='owner'?renderVATForecast():'';
+  var overdueAlertDash=userRole==='owner'?renderOverdueAlert():'';
+  g('dash-content').innerHTML=overdueAlertDash+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+vatForecast;
   if(typeof Chart==='undefined')return;
   cos.forEach(function(c){
     var allInv=invs.filter(function(i){return i.company===c.id;});
@@ -858,6 +869,16 @@ function renderDash(){
 }
 
 // Event delegation for table checkboxes and buttons
+function onNoteChange(e){
+  var el=e.target;
+  var id=el.getAttribute('data-id');
+  saveNote(id,el.value);
+}
+function onDueChange(e){
+  var el=e.target;
+  var id=el.getAttribute('data-id');
+  saveDue(id,el.value);
+}
 function onChkChange(e){
   var el=e.target;
   var id=el.getAttribute('data-id');
@@ -899,11 +920,112 @@ function calcNettoForInv(inv){
   return netto + vat * 0.5; // koszt netto + nieodliczony VAT
 }
 
+// === ROLE MANAGEMENT ===
+function applyRole(){
+  if(userRole==='worker'){
+    // Worker: only scan and import visible, no financial data
+    var hide=['nav-ledger','nav-firms','nav-dash'];
+    hide.forEach(function(id){var el=g(id);if(el)el.style.display='none';});
+    // Default to scan
+    goTab('scan');
+  }
+}
+
+// === OVERDUE DETECTION ===
+function isOverdue(inv){
+  if(!inv.dueDate||inv.paid)return false;
+  return new Date(inv.dueDate) < new Date();
+}
+function daysOverdue(inv){
+  if(!inv.dueDate)return 0;
+  var diff=new Date()-new Date(inv.dueDate);
+  return Math.floor(diff/(1000*60*60*24));
+}
+
+// === NOTE SAVING ===
+function saveNote(id, note){
+  fetch('/api/invoices/'+id+'/note',{method:'PATCH',headers:ah(),body:JSON.stringify({note:note})})
+  .then(function(){var i=invs.find(function(x){return x.id===id;});if(i)i.note=note;});
+}
+function saveDue(id, dueDate){
+  fetch('/api/invoices/'+id+'/due',{method:'PATCH',headers:ah(),body:JSON.stringify({dueDate:dueDate})})
+  .then(function(){var i=invs.find(function(x){return x.id===id;});if(i)i.dueDate=dueDate;renderLedger();});
+}
+
+// === VAT FORECAST ===
+function renderVATForecast(){
+  var quarters={Q1:['01','02','03'],Q2:['04','05','06'],Q3:['07','08','09'],Q4:['10','11','12']};
+  var curMonth=String(new Date().getMonth()+1).padStart(2,'0');
+  var curQ='Q1';
+  Object.keys(quarters).forEach(function(q){if(quarters[q].indexOf(curMonth)>=0)curQ=q;});
+  var qMonths=quarters[curQ];
+  var h='<div class="card" style="margin-top:16px;border:0.5px solid rgba(45,224,200,.2)">'
+    +'<div style="font-weight:700;font-size:14px;color:var(--accent);margin-bottom:12px">&#128197; Prognoza VAT '+curQ+' '+selYear+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
+  var totalVat=0;
+  COS.forEach(function(c){
+    var qInvs=invs.filter(function(i){return i.company===c.id&&i.date&&qMonths.some(function(m){return i.date.indexOf(selYear+'-'+m)===0;});});
+    var vI=qInvs.filter(function(i){return i.type==='sale';}).reduce(function(a,i){return a+calcV(i.brutto,i.vatRate);},0);
+    var vO=qInvs.filter(function(i){return i.type==='buy';}).reduce(function(a,i){return a+calcVatForInv(i);},0);
+    var vatDue=vI-vO;
+    totalVat+=vatDue;
+    h+='<div style="background:var(--bg3);border-radius:8px;padding:10px">'
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+c.short+'</div>'
+      +'<div style="font-size:15px;font-weight:600;font-family:var(--mono);color:'+(vatDue>0?'var(--amber)':vatDue<0?'var(--green)':'inherit')+'">'+fmt(vatDue)+'</div>'
+      +'</div>';
+  });
+  h+='<div style="background:rgba(45,224,200,.08);border:0.5px solid rgba(45,224,200,.2);border-radius:8px;padding:10px">'
+    +'<div style="font-size:11px;color:var(--accent);margin-bottom:3px">RAZEM</div>'
+    +'<div style="font-size:15px;font-weight:700;font-family:var(--mono);color:'+(totalVat>0?'var(--amber)':totalVat<0?'var(--green)':'inherit')+'">'+fmt(totalVat)+'</div>'
+    +'</div>';
+  h+='</div></div>';
+  return h;
+}
+
+// === OVERDUE ALERTS ===
+function renderOverdueAlert(){
+  var overdue=invs.filter(function(i){return i.type==='buy'&&isOverdue(i);});
+  if(!overdue.length)return '';
+  var total=overdue.reduce(function(a,i){return a+i.brutto;},0);
+  var h='<div style="background:rgba(240,96,96,.1);border:0.5px solid rgba(240,96,96,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<div style="font-weight:700;color:var(--red);font-size:14px">&#9888; Przeterminowane faktury kosztowe ('+overdue.length+')</div>'
+    +'<div style="font-weight:700;color:var(--red);font-family:var(--mono)">'+fmt(total)+'</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:4px">';
+  overdue.slice(0,5).forEach(function(i){
+    var days=daysOverdue(i);
+    var co=COS.find(function(x){return x.id===i.company;});
+    h+='<div style="display:flex;justify-content:space-between;font-size:12px;font-family:var(--mono);padding:4px 0;border-bottom:0.5px solid rgba(240,96,96,.15)">'
+      +'<span style="color:var(--muted)">'+(co?co.short:'?')+' &middot; '+(i.contractor||'?').slice(0,30)+'</span>'
+      +'<span style="color:var(--red)">'+days+' dni &middot; '+fmt(i.brutto)+'</span>'
+      +'</div>';
+  });
+  if(overdue.length>5)h+='<div style="font-size:11px;color:var(--muted);margin-top:4px">...i jeszcze '+(overdue.length-5)+' faktur</div>';
+  h+='</div></div>';
+  return h;
+}
+
+// === EXPORT ===
+function exportCSV(){
+  fetch('/api/export/csv',{headers:{'x-auth-token':tok()}})
+  .then(function(r){return r.blob();})
+  .then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='faktury-vipremium.csv';
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);URL.revokeObjectURL(url);
+  });
+}
+
 window.onload=function(){
   if(sessionStorage.getItem('vip_auth')==='1'){
+    userRole=sessionStorage.getItem('vip_role')||'owner';
     g('login').style.display='none';
     g('app').style.display='flex';
     expYr['all_'+selYear]=true;
+    applyRole();
     loadInvs();
   }
 };

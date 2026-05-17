@@ -52,9 +52,24 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    // Migrations
-    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date VARCHAR(20)").catch(() => {});
-    await pool.query("ALTER TABLE invoices ADD COLUMN IF NOT EXISTS note TEXT").catch(() => {});
+    // Migrations - add all missing columns
+    const migrations = [
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid BOOLEAN DEFAULT FALSE",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date VARCHAR(20)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS note TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS brutto_orig NUMERIC(14,2)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS nbp_rate NUMERIC(12,6)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS nbp_date VARCHAR(20)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS nbp_table VARCHAR(100)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS nbp_info TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS confidence VARCHAR(20)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS buyer VARCHAR(500)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'PLN'",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_rate INTEGER DEFAULT 0"
+    ];
+    for (const sql of migrations) {
+      await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
+    }
     console.log('DB ready');
   } catch (e) {
     console.error('DB init error:', e.message);

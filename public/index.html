@@ -536,8 +536,8 @@ function sfile(file){
     var block=mime==='application/pdf'
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
-    var fleetList=FLEET.join(',');
-    var sys='Jestes systemem OCR do faktur VAT transportowych. Zwroc TYLKO JSON bez markdown, bez komentarzy.\n\nFORMAT:\n{\"num\":\"numer faktury\",\"date\":\"YYYY-MM-DD\",\"due_date\":\"YYYY-MM-DD lub null\",\"contractor\":\"wystawca pelna nazwa\",\"buyer\":\"nabywca pelna nazwa\",\"type\":\"sale lub buy\",\"brutto\":liczba,\"netto\":liczba,\"vat_rate\":liczba_procent,\"currency\":\"KOD_WALUTY\",\"description\":\"opis max 80 znakow\",\"raw_text\":\"pierwsze 300 znakow\",\"confidence\":\"high/medium/low\",\"vehicle_breakdown\":[{\"plate\":\"TABLICA\",\"amount\":kwota}]}\n\nKRYTYCZNE ZASADY:\n1. vehicle_breakdown: PRZESZUKAJ CALY DOKUMENT - szukaj tablic rejestracyjnych. Znane tablice floty: '+fleetList+'. Stare tablice (zamien): DW1VT08->DSR80719, DW1WN03->DSR80874, DW5VX38->DSR80682. Dla KAZDEGO pojazdu wstaw jego tablice i kwote. Faktury CRT/TFC/AS24/DFDS/MoveExpert maja pozycje per pojazd - WYCIAGNIJ WSZYSTKIE.\n2. Tabela pozycji per pojazd -> kazda pozycja = osobny obiekt vehicle_breakdown.\n3. Tablice w tekscie bez kwot -> wstaw amount:0.\n4. Brak tablic -> [].\n5. type=sale TYLKO gdy wystawca=Vipremium/VT/PT&L/ET&VG.\n6. brutto/netto w walucie faktury.\n7. TYLKO JSON.';
+    var _fl=FLEET.join(',');
+    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba,"netto":liczba,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":kwota}]}\nKRYTYCZNE: vehicle_breakdown = PRZESZUKAJ CALY DOK. Flota: '+_fl+'. Stare tablice: DW1VT08=DSR80719, DW1WN03=DSR80874, DW5VX38=DSR80682. Faktury CRT/TFC/AS24/DFDS/MoveExpert maja pozycje per pojazd - wyciagnij wszystkie z kwotami. Brak tablic=[]. type=sale tylko gdy wystawca=Vipremium/VT/PT&L/ET&VG. Tylko JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',max_tokens:2000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -564,34 +564,27 @@ function sfile(file){
         if(autoVehicles.indexOf(newPlate)<0)autoVehicles.push(newPlate);
       }
     });
-    // Use AI vehicle_breakdown if available (fuel/ferry invoices)
+    // Use AI vehicle_breakdown if available
     var vehicleBreakdown=[];
     if(ai.vehicle_breakdown&&ai.vehicle_breakdown.length){
       ai.vehicle_breakdown.forEach(function(vb){
         var plate=normalizePlate(vb.plate||'');
-        // Try exact match first, then partial
-        var match=FLEET.find(function(f){return f===plate;});
-        if(!match)match=FLEET.find(function(f){return plate.indexOf(f)>=0||f.indexOf(plate)>=0;});
+        var match=FLEET.find(function(f){return f===plate;})||FLEET.find(function(f){return plate.indexOf(f)>=0||f.indexOf(plate)>=0;});
         if(match){
           vehicleBreakdown.push({plate:match,amount:parseFloat(vb.amount)||0});
           if(autoVehicles.indexOf(match)<0)autoVehicles.push(match);
         }
       });
     }
-    // If vehicleBreakdown has items but all amounts are 0, do equal split
-    if(vehicleBreakdown.length>0){
-      var hasAmounts=vehicleBreakdown.some(function(vb){return vb.amount>0;});
-      if(!hasAmounts){
-        var eqShare=Math.round(brutto/vehicleBreakdown.length*100)/100;
-        vehicleBreakdown.forEach(function(vb){vb.amount=eqShare;});
-      }
+    // Fallback: jesli wszystkie amount=0, podziel rowno
+    if(vehicleBreakdown.length>0&&!vehicleBreakdown.some(function(x){return x.amount>0;})){
+      var eq=Math.round(brutto/vehicleBreakdown.length*100)/100;
+      vehicleBreakdown.forEach(function(x){x.amount=eq;});
     }
-    // If no breakdown but vehicles detected in text, do equal split too
+    // Fallback: tablice w tekscie ale brak breakdown -> rowny podzial
     if(vehicleBreakdown.length===0&&autoVehicles.length>0){
-      var eqShare2=Math.round(brutto/autoVehicles.length*100)/100;
-      autoVehicles.forEach(function(v){
-        vehicleBreakdown.push({plate:v,amount:eqShare2});
-      });
+      var eq2=Math.round(brutto/autoVehicles.length*100)/100;
+      autoVehicles.forEach(function(v){vehicleBreakdown.push({plate:v,amount:eq2});});
     }
     var autoCat='other';
     var contLow=(ai.contractor||'').toLowerCase();
@@ -645,8 +638,8 @@ function sfile(file){
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',
       nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:ai.confidence||'medium',
       bruttoOrig:null,paid:false,dueDate:ai.due_date||null,note:null,
-      costCat:autoCat,vehicles:autoVehicles,vehicleBreakdown:vehicleBreakdown,
-      _aiVehRaw:ai.vehicle_breakdown||[]};
+      costCat:autoCat,vehicles:autoVehicles,vehicleBreakdown:vehicleBreakdown};
+    if(pending.currency!=='PLN'){
       setMsg('sstatus','<span class="spin">&#8635;</span> Pobieram kurs NBP...','info');
       return fetch('/api/nbp/'+pending.currency+'/'+pending.date).then(function(r){
         if(r.ok){
@@ -732,7 +725,6 @@ function renderSForm(){
       +'</div>'
       +'</div>'
       +'</div>'
-      +(pending.vehicleBreakdown&&pending.vehicleBreakdown.length>0?'<div style="background:rgba(45,224,200,.06);border:0.5px solid rgba(45,224,200,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;margin-top:8px">'+'<div style="font-weight:600;color:var(--accent);margin-bottom:5px">&#128202; AI wykryl pojazdy ('+pending.vehicleBreakdown.length+')</div>'+pending.vehicleBreakdown.map(function(vb){return '<div style="display:flex;justify-content:space-between;padding:2px 0;font-family:var(--mono);font-size:12px"><span style="color:var(--amber)">'+vb.plate+'</span><span>'+fmt(vb.amount*(pending.nbpRate||1))+'</span></div>';}).join('')+'</div>':'')
     ):'')
     +'<div class="g2"><div class="fg"><label>Kwota brutto PLN'+(isEUR?' (przeliczona)':'')+'</label><input type="number" id="pbrutto" value="'+(pending.brutto||'')+'" step="0.01" oninput="pending.brutto=parseFloat(this.value)||0;refreshComp()"></div>'
     +'<div class="fg"><label>Stawka VAT</label><select onchange="pending.vatRate=parseInt(this.value);refreshComp()">'+vatOpts+'</select></div></div>'
@@ -1515,19 +1507,13 @@ function renderVehicles(){
   var customsPerVeh=FLEET.length>0?customsTotal/FLEET.length:0;
 
   function getVehShare(inv, veh){
-    // Use vehicleBreakdown for ALL categories (not just fuel/ferry)
     if(inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
       var vb=inv.vehicleBreakdown.find(function(x){return x.plate===veh;});
       if(vb){
         var amt=parseFloat(vb.amount)||0;
-        // If amounts stored in foreign currency, convert to PLN
-        if(inv.currency&&inv.currency!=='PLN'&&inv.nbpRate&&amt>0){
-          return Math.round(amt*inv.nbpRate*100)/100;
-        }
-        return amt;
+        return (inv.currency&&inv.currency!=='PLN'&&inv.nbpRate&&amt>0)?Math.round(amt*inv.nbpRate*100)/100:amt;
       }
     }
-    // Fallback: equal split across vehicles
     if(!inv.vehicles||inv.vehicles.length===0) return 0;
     return inv.brutto/inv.vehicles.length;
   }

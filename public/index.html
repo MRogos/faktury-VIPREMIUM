@@ -721,7 +721,9 @@ function renderDash(){
     var b=allInv.filter(function(i){return i.type==='buy';});
     var gI=s.reduce(function(a,i){return a+i.brutto;},0);
     var gO=b.reduce(function(a,i){return a+i.brutto;},0);
-    var bal=calcN(gI,23)-calcN(gO,23);
+    var balI=s.reduce(function(a,i){return a+calcN(i.brutto,i.vatRate);},0);
+    var balO=b.reduce(function(a,i){return a+calcNettoForInv(i);},0);
+    var bal=balI-balO;
     var plus=bal>=0;
     var chartId='dash-chart-'+c.id;
     cards+='<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:16px;border-top:2px solid #2de0c8">'
@@ -741,16 +743,22 @@ function renderDash(){
   // === KONSOLIDACJA GRUPY ===
   // Faktury miedzy wlasnymi firmami - eliminujemy z wynikow
   var GROUP_KEYWORDS = [
-    'vipremium transport','vipremium ltd','premium transport','premium logistics',
-    'vipremium marcin rogowski','vipremium jdg','elite tax','van group','elitetax',
-    'pt&l','pt &l'
+    'vipremium transport','vipremium ltd',
+    'premium transport & log','premium transport &log',
+    'vipremium marcin rogowski',
+    'elite tax & van','elitetax & van','elitetax&van',
+    'pt&l sp. z o.o','pt&l sp.z o.o'
   ];
   function isIntercompany(inv){
+    // Only match contractor or buyer - not description (too risky)
     var cont = (inv.contractor||'').toLowerCase();
     var buyer = (inv.buyer||'').toLowerCase();
-    var desc = (inv.description||'').toLowerCase();
-    var txt = cont+' '+buyer+' '+desc;
-    return GROUP_KEYWORDS.some(function(kw){ return txt.indexOf(kw)>=0; });
+    // Check if BOTH contractor AND buyer are our companies (true intercompany)
+    var contIsOurs = GROUP_KEYWORDS.some(function(kw){ return cont.indexOf(kw)>=0; });
+    var buyerIsOurs = GROUP_KEYWORDS.some(function(kw){ return buyer.indexOf(kw)>=0; });
+    // Intercompany = contractor is one of our firms AND company field is also ours
+    // Or: contractor is ours (we're paying ourselves)
+    return contIsOurs && buyerIsOurs;
   }
 
   // Consolidated stats - external only
@@ -759,7 +767,9 @@ function renderDash(){
   var extCosts = extInvs.filter(function(i){ return i.type==='buy'; });
   var extGI = extSales.reduce(function(a,i){return a+i.brutto;},0);
   var extGO = extCosts.reduce(function(a,i){return a+i.brutto;},0);
-  var extBal = calcN(extGI,23) - calcN(extGO,23);
+  var extBalI = extSales.reduce(function(a,i){return a+calcN(i.brutto,i.vatRate);},0);
+  var extBalO = extCosts.reduce(function(a,i){return a+calcNettoForInv(i);},0);
+  var extBal = extBalI - extBalO;
   var interCount = invs.length - extInvs.length;
 
   // Monthly consolidated data

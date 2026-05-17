@@ -706,6 +706,71 @@ function delInv(id){
   .then(function(){invs=invs.filter(function(i){return i.id!==id;});renderTree();renderCur();});
 }
 
+function renderDash(){
+  var MNS=['Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paz','Lis','Gru'];
+  var cos=[
+    {id:'vt',name:'VIPREMIUM TRANSPORT LTD',short:'VT Ltd'},
+    {id:'pt',name:'Premium Transport & Logistic',short:'PT&L'},
+    {id:'et',name:'Elite Tax & Van Group',short:'ET&VG'},
+    {id:'vr',name:'Vipremium Marcin Rogowski',short:'VMR'}
+  ];
+  var cards='';
+  cos.forEach(function(c){
+    var allInv=invs.filter(function(i){return i.company===c.id;});
+    var s=allInv.filter(function(i){return i.type==='sale';});
+    var b=allInv.filter(function(i){return i.type==='buy';});
+    var gI=s.reduce(function(a,i){return a+i.brutto;},0);
+    var gO=b.reduce(function(a,i){return a+i.brutto;},0);
+    var bal=calcN(gI,23)-calcN(gO,23);
+    var plus=bal>=0;
+    var chartId='dash-chart-'+c.id;
+    cards+='<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:16px;border-top:2px solid #2de0c8">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+      +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">'+c.short+'</div>'
+      +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+c.name+'</div></div>'
+      +'<span style="background:'+(plus?'rgba(96,200,144,.15)':'rgba(240,96,96,.15)')+';color:'+(plus?'var(--green)':'var(--red)')+';font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px">'+(plus?'Na plusie':'Na minusie')+'</span>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">'
+      +'<div style="background:var(--bg3);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Przychody</div><div style="font-size:16px;font-weight:600;color:var(--green);font-family:var(--mono)">'+fmt(gI)+'</div></div>'
+      +'<div style="background:var(--bg3);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Koszty</div><div style="font-size:16px;font-weight:600;color:var(--red);font-family:var(--mono)">'+fmt(gO)+'</div></div>'
+      +'<div style="background:var(--bg3);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Wynik netto</div><div style="font-size:16px;font-weight:600;font-family:var(--mono);color:'+(plus?'var(--green)':'var(--red)')+'">'+fmt(Math.abs(bal))+'</div></div>'
+      +'</div>'
+      +'<div style="position:relative;height:110px"><canvas id="'+chartId+'" role="img" aria-label="Wykres '+c.short+'">Dane '+c.short+'</canvas></div>'
+      +'</div>';
+  });
+  g('dash-content').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>';
+  if(typeof Chart==='undefined')return;
+  cos.forEach(function(c){
+    var allInv=invs.filter(function(i){return i.company===c.id;});
+    var chartMonths=[],chartInc=[],chartCosts=[];
+    MONTHS.forEach(function(m,idx){
+      var pfx=selYear+'-'+m;
+      var ms=allInv.filter(function(i){return i.type==='sale'&&i.date&&i.date.indexOf(pfx)===0;});
+      var mb=allInv.filter(function(i){return i.type==='buy'&&i.date&&i.date.indexOf(pfx)===0;});
+      var mi=ms.reduce(function(a,i){return a+i.brutto;},0);
+      var mo=mb.reduce(function(a,i){return a+i.brutto;},0);
+      if(mi>0||mo>0){chartMonths.push(MNS[idx]);chartInc.push(Math.round(mi));chartCosts.push(Math.round(mo));}
+    });
+    var el=g('dash-chart-'+c.id);
+    if(!el||!chartMonths.length)return;
+    if(el._chart)el._chart.destroy();
+    el._chart=new Chart(el,{
+      type:'bar',
+      data:{labels:chartMonths,datasets:[
+        {label:'Przychody',data:chartInc,backgroundColor:'#2de0c8',borderRadius:3},
+        {label:'Koszty',data:chartCosts,backgroundColor:'#f06060',borderRadius:3}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{grid:{display:false},ticks:{font:{size:10},color:'#888'}},
+          y:{grid:{color:'rgba(128,128,128,.1)'},ticks:{font:{size:10},color:'#888',callback:function(v){return v>=1000?Math.round(v/1000)+'k':v;}}}
+        }
+      }
+    });
+  });
+}
+
 window.onload=function(){
   if(sessionStorage.getItem('vip_auth')==='1'){
     g('login').style.display='none';

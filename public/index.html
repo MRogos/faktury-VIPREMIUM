@@ -839,8 +839,9 @@ function renderDash(){
     +'</div>';
 
   var vatForecast=userRole==='owner'?renderVATForecast():'';
+  var foreignVatHtml=userRole==='owner'?renderForeignVAT():'';
   var overdueAlertDash=userRole==='owner'?renderOverdueAlert():'';
-  g('dash-content').innerHTML=overdueAlertDash+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+vatForecast;
+  g('dash-content').innerHTML=overdueAlertDash+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+foreignVatHtml+vatForecast;
   if(typeof Chart==='undefined')return;
   cos.forEach(function(c){
     var allInv=invs.filter(function(i){return i.company===c.id;});
@@ -929,6 +930,26 @@ function toggleFirm(el){
 // DW7RE52 i DX28899 - odliczamy tylko 50% kosztow VAT
 var HALF_VAT_KEYWORDS = ['DW7RE52','DX28899'];
 
+// Zagraniczni dostawcy paliwa - VAT zagraniczny (VAT-REF), nie wchodzi do PL
+var FOREIGN_VAT_SUPPLIERS = ['as24','morgan fuels','morgan fuel','tankpol','crt partner','uab crt','tfc','total energies','dkv','uta '];
+
+function isForeignVatInv(inv){
+  var cont = (inv.contractor||'').toLowerCase();
+  // Tylko faktury w walucie innej niz PLN od zagranicznych dostawcow paliwa
+  return inv.currency !== 'PLN' && FOREIGN_VAT_SUPPLIERS.some(function(s){ return cont.indexOf(s) >= 0; });
+}
+
+function getForeignVatAmount(inv){
+  if(!isForeignVatInv(inv)) return 0;
+  // VAT zagraniczny w PLN = VAT w walucie oryginalnej × kurs NBP
+  if(inv.bruttoOrig && inv.nbpRate){
+    var vatOrig = calcV(inv.bruttoOrig, inv.vatRate);
+    return vatOrig * inv.nbpRate;
+  }
+  // Fallback - waluta PLN (nie powinno się zdarzyć)
+  return calcV(inv.brutto, inv.vatRate);
+}
+
 function isHalfVatInv(inv){
   var txt = ((inv.description||'')+(inv.contractor||'')+(inv.num||'')).toUpperCase();
   return HALF_VAT_KEYWORDS.some(function(kw){ return txt.indexOf(kw) >= 0; });
@@ -936,15 +957,20 @@ function isHalfVatInv(inv){
 
 // Nadpisuje calcV dla faktur z autami osobowymi
 function calcVatForInv(inv){
+  if(isForeignVatInv(inv)) return 0; // VAT zagraniczny - nie wchodzi do PL VAT
   var v = calcV(inv.brutto, inv.vatRate);
   return isHalfVatInv(inv) ? v * 0.5 : v;
 }
 function calcNettoForInv(inv){
+  if(isForeignVatInv(inv)){
+    // Koszt = NETTO (bez VAT zagranicznego) - VAT odzyskiwany osobno przez VAT-REF
+    return calcN(inv.brutto, inv.vatRate);
+  }
   if(!isHalfVatInv(inv)) return calcN(inv.brutto, inv.vatRate);
   // 50% VAT = można odliczyć połowę, reszta to koszt
   var netto = calcN(inv.brutto, inv.vatRate);
   var vat = calcV(inv.brutto, inv.vatRate);
-  return netto + vat * 0.5; // koszt netto + nieodliczony VAT
+  return netto + vat * 0.5;
 }
 
 // === ROLE MANAGEMENT ===
@@ -980,6 +1006,68 @@ function saveDue(id, dueDate){
 }
 
 // === VAT FORECAST ===
+function renderForeignVAT(){
+  var quarters={Q1:['01','02','03'],Q2:['04','05','06'],Q3:['07','08','09'],Q4:['10','11','12']};
+  var curMonth=String(new Date().getMonth()+1).padStart(2,'0');
+  var curQ='Q1';
+  Object.keys(quarters).forEach(function(q){if(quarters[q].indexOf(curMonth)>=0)curQ=q;});
+  var qMonths=quarters[curQ];
+
+  // All foreign VAT invoices in current year
+  var foreignInvs=invs.filter(function(i){
+    return i.type==='buy' && isForeignVatInv(i) && i.date && i.date.indexOf(selYear)===0;
+  });
+
+  if(!foreignInvs.length) return '';
+
+  var totalForeignVatPLN=foreignInvs.reduce(function(a,i){return a+getForeignVatAmount(i);},0);
+
+  // Current quarter
+  var qForeignInvs=foreignInvs.filter(function(i){
+    return qMonths.some(function(m){return i.date&&i.date.indexOf(selYear+'-'+m)===0;});
+  });
+  var qForeignVatPLN=qForeignInvs.reduce(function(a,i){return a+getForeignVatAmount(i);},0);
+
+  // Group by currency
+  var byCurr={};
+  foreignInvs.forEach(function(i){
+    var c=i.currency||'EUR';
+    if(!byCurr[c])byCurr[c]={vatOrig:0,vatPLN:0,cnt:0};
+    var vatOrig=calcV(i.bruttoOrig||i.brutto, i.vatRate);
+    byCurr[c].vatOrig+=vatOrig;
+    byCurr[c].vatPLN+=getForeignVatAmount(i);
+    byCurr[c].cnt++;
+  });
+
+  var currRows='';
+  Object.keys(byCurr).forEach(function(c){
+    var d=byCurr[c];
+    currRows+='<div style="background:var(--bg3);border-radius:8px;padding:10px">'
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+c+' ('+d.cnt+' faktur)</div>'
+      +'<div style="font-size:15px;font-weight:600;color:#60a8f0;font-family:var(--mono)">'+d.vatOrig.toFixed(2)+' '+c+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">&asymp; '+fmt(d.vatPLN)+'</div>'
+      +'</div>';
+  });
+
+  return '<div style="background:var(--bg2);border:0.5px solid rgba(96,168,240,.3);border-radius:12px;padding:20px;margin-top:16px;border-top:2px solid #60a8f0">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    +'<div>'
+    +'<div style="font-size:13px;font-weight:700;color:#60a8f0;margin-bottom:2px">&#127758; VAT ZAGRANICZNY DO ZWROTU (VAT-REF)</div>'
+    +'<div style="font-size:11px;color:var(--muted)">AS24, Morgan Fuels, CRT Partner, Tankpol, TFC &mdash; nie wchodzi do rozliczenia PL</div>'
+    +'</div>'
+    +'<div style="text-align:right">'
+    +'<div style="font-size:11px;color:var(--muted)">'+curQ+' '+selYear+'</div>'
+    +'<div style="font-size:20px;font-weight:700;color:#60a8f0;font-family:var(--mono)">'+fmt(qForeignVatPLN)+'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px">'+currRows+'</div>'
+    +'<div style="background:rgba(96,168,240,.08);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;color:var(--muted)">Caly rok '+selYear+' &mdash; VAT zagraniczny lacznie</span>'
+    +'<span style="font-size:16px;font-weight:700;color:#60a8f0;font-family:var(--mono)">'+fmt(totalForeignVatPLN)+'</span>'
+    +'</div>'
+    +'</div>';
+}
+
 function renderVATForecast(){
   var quarters={Q1:['01','02','03'],Q2:['04','05','06'],Q3:['07','08','09'],Q4:['10','11','12']};
   var curMonth=String(new Date().getMonth()+1).padStart(2,'0');

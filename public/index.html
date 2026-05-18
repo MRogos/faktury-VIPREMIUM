@@ -505,7 +505,7 @@ function renderFirms(){
       h+='</div>';
       var fi=invs.filter(function(i){return i.company===c.id&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
       if(fi.length){
-        h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
+        h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
         fi.forEach(function(i){
           h+='<tr><td>'+(i.date||'-')+'</td>';
           h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
@@ -513,6 +513,8 @@ function renderFirms(){
             +(i.num?'<div style="font-weight:600;color:var(--text);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
             +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||'-').slice(0,38)+'</div>'
             +'</td>';
+          var _cat=COST_CATS.find(function(c){return c.id===i.costCat;});
+          h+='<td style="white-space:nowrap;font-size:12px">'+(_cat?_cat.icon+' <span style="opacity:.7">'+_cat.label+'</span>':'-')+'</td>';
           h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
           h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
           h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';

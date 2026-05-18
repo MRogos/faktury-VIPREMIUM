@@ -171,13 +171,17 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <h1>Skanuj fakture</h1>
       <p class="sub">Przeciagnij PDF lub zdjecie &#8212; AI odczyta dane automatycznie</p>
       <div id="sstatus"></div>
-      <div class="drop" onclick="document.getElementById('sfi').click()" ondragover="event.preventDefault();this.classList.add('ov')" ondragleave="this.classList.remove('ov')" ondrop="this.classList.remove('ov');sdrop(event)">
+      <div class="drop" onclick="document.getElementById('sfi').click()" ondragover="event.preventDefault();this.classList.add('ov')" ondragleave="this.classList.remove('ov')" ondrop="this.classList.remove('ov');sdrop(event)" id="sdropzone">
         <span style="font-size:32px;display:block;margin-bottom:8px">&#11014;</span>
         <b>Wrzuc fakture tutaj</b>
         <p>PDF / JPG / PNG &#8212; drag &amp; drop lub kliknij</p>
       </div>
       <input type="file" id="sfi" accept=".pdf,.jpg,.jpeg,.png,image/*" onchange="sfile(this.files[0])">
-      <div id="sform"></div>
+      <div id="scan-split" style="display:none;gap:20px;align-items:flex-start">
+        <div id="sform" style="flex:1;min-width:0"></div>
+        <div id="sprev" style="flex:1;min-width:0;position:sticky;top:20px"></div>
+      </div>
+      <div id="sform-solo"></div>
     </div>
     <div id="page-import" style="display:none">
       <h1>Import XLSX / PDF</h1>
@@ -528,6 +532,7 @@ function renderFirms(){
 
 function sdrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)sfile(f);}
 
+var pendingFileURL=null;var pendingFileMime=null;
 function sfile(file){
   pending=null;g('sform').innerHTML='';
   setMsg('sstatus','<span class="spin">&#8635;</span> AI czyta fakture...','info');
@@ -682,7 +687,26 @@ function guessCompany(txt){
   return null;
 }
 function renderSForm(){
-  if(!pending){g('sform').innerHTML='';return;}
+  if(!pending){
+    var sp=g('scan-split');if(sp){sp.style.display='none';}
+    var sf=g('sform');if(sf)sf.innerHTML='';
+    var sp2=g('sprev');if(sp2)sp2.innerHTML='';
+    return;
+  }
+  // Aktywuj split layout
+  var splitEl=g('scan-split');
+  if(splitEl){splitEl.style.display='flex';g('sdropzone').style.display='none';}
+  // Podglad faktury
+  var prevEl=g('sprev');
+  if(prevEl&&pendingFileURL){
+    if(pendingFileMime==='application/pdf'){
+      prevEl.innerHTML='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Podglad faktury</div>'
+        +'<iframe src="'+pendingFileURL+'" style="width:100%;height:80vh;border:0.5px solid var(--border);border-radius:10px;background:#fff" title="Podglad faktury"></iframe>';
+    } else {
+      prevEl.innerHTML='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Podglad faktury</div>'
+        +'<img src="'+pendingFileURL+'" style="width:100%;border:0.5px solid var(--border);border-radius:10px;object-fit:contain;max-height:80vh" alt="Podglad faktury">';
+    }
+  }
   var n=calcN(pending.brutto,pending.vatRate),v=calcV(pending.brutto,pending.vatRate);
   var isEUR=pending.currency!=='PLN';
   var nbp='';
@@ -804,7 +828,7 @@ function toggleVehicle(v,checked){
   if(checked){if(pending.vehicles.indexOf(v)<0)pending.vehicles.push(v);}
   else{pending.vehicles=pending.vehicles.filter(function(x){return x!==v;});}
 }
-function cancelScan(){pending=null;renderSForm();setMsg('sstatus','','');}
+function cancelScan(){pending=null;if(pendingFileURL){URL.revokeObjectURL(pendingFileURL);pendingFileURL=null;}var sp=g('scan-split');if(sp)sp.style.display='none';var dz=g('sdropzone');if(dz)dz.style.display='';renderSForm();setMsg('sstatus','','');}
 function manualRate(val){var r=parseFloat(val)||0;pending.nbpRate=r;pending.brutto=r>0?Math.round((pending.bruttoOrig||pending.brutto)*r*100)/100:0;refreshComp();}
 function refreshComp(){
   var el2=g('scomp');if(!el2||!pending)return;

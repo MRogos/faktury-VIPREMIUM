@@ -277,6 +277,8 @@ var COST_CATS=[
   {id:'toll',    label:'Autostrady',      icon:'🛣️'},
   {id:'customs', label:'Odprawa celna',   icon:'📋'},
   {id:'fixed',   label:'Koszty stale',    icon:'🏢'},
+  {id:'office',  label:'Biuro',           icon:'🖥️'},
+  {id:'workshop',label:'Warsztat',         icon:'🔩'},
   {id:'other',   label:'Koszty dodatkowe',icon:'📦'}
 ];
 var invs=[],pending=null,curTab='dash',userRole='owner';
@@ -815,6 +817,24 @@ function sfile(file){
       ||allLow.indexOf('telefoniczn')>=0||allLow.indexOf('internet')>=0
       ||allLow.indexOf('viatoll')>=0||allLow.indexOf('e-toll')>=0||allLow.indexOf('etoll')>=0)
       autoCat='fixed';
+    // Biuro - materialy biurowe, papier, drukarka, komputer, software, hosting
+    else if(allLow.indexOf('biuro')>=0||allLow.indexOf('papier')>=0
+      ||allLow.indexOf('drukark')>=0||allLow.indexOf('toner')>=0||allLow.indexOf('tusz')>=0
+      ||allLow.indexOf('komputer')>=0||allLow.indexOf('laptop')>=0||allLow.indexOf('monitor')>=0
+      ||allLow.indexOf('oprogramow')>=0||allLow.indexOf('software')>=0||allLow.indexOf('licencj')>=0
+      ||allLow.indexOf('hosting')>=0||allLow.indexOf('domena')>=0
+      ||allLow.indexOf('stapl')>=0||allLow.indexOf('segregat')>=0||allLow.indexOf('teczk')>=0
+      ||allLow.indexOf('office')>=0||allLow.indexOf('microsoft')>=0||allLow.indexOf('google workspace')>=0)
+      autoCat='office';
+    // Warsztat - narzedzia, czesci, akcesoria warsztatowe
+    else if(allLow.indexOf('narzedzi')>=0||allLow.indexOf('klucz')>=0
+      ||allLow.indexOf('wiertark')>=0||allLow.indexOf('szlifierk')>=0||allLow.indexOf('spawark')>=0
+      ||allLow.indexOf('lewarek')>=0||allLow.indexOf('podnos')>=0
+      ||allLow.indexOf('smarownic')>=0||allLow.indexOf('kompresor')>=0
+      ||allLow.indexOf('warsztat')>=0||allLow.indexOf('worksh')>=0
+      ||allLow.indexOf('filtr')>=0||allLow.indexOf('olej silnik')>=0
+      ||allLow.indexOf('hamulc')>=0||allLow.indexOf('klocki')>=0)
+      autoCat='workshop';
     pending={id:uid(),company:guess||'vt',guessed:!!guess,type:ai.type==='sale'?'sale':'buy',
       num:ai.num||'',date:ai.date||today(),contractor:ai.contractor||'',buyer:ai.buyer||'',
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',
@@ -1708,12 +1728,14 @@ function renderVehicles(){
 
   // Categories to show per vehicle (customs = shared, shown as one column)
   var COLS=[
-    {id:'fuel',   label:'Tankowanie',       icon:'⛽'},
-    {id:'ferry',  label:'Promy',            icon:'🚢'},
-    {id:'service',label:'Serwis',           icon:'🔧'},
-    {id:'toll',   label:'Autostrady',       icon:'🛣️'},
-    {id:'fixed',  label:'Koszty stale',     icon:'🏢'},
-    {id:'other',  label:'Koszty dodatkowe', icon:'📦'}
+    {id:'fuel',     label:'Tankowanie',       icon:'⛽'},
+    {id:'ferry',    label:'Promy',            icon:'🚢'},
+    {id:'service',  label:'Serwis',           icon:'🔧'},
+    {id:'toll',     label:'Autostrady',       icon:'🛣️'},
+    {id:'fixed',    label:'Koszty stale',     icon:'🏢'},
+    {id:'office',   label:'Biuro',            icon:'🖥️'},
+    {id:'workshop', label:'Warsztat',          icon:'🔩'},
+    {id:'other',    label:'Koszty dodatkowe', icon:'📦'}
   ];
   // Customs split equally across all vehicles
   var customsTotal=buyInvs.filter(function(i){return i.costCat==='customs';})

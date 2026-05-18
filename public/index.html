@@ -474,6 +474,89 @@ function setPeriodMonth(m){
   renderCur();
 }
 
+
+function openEditModal(id){
+  var inv=invs.find(function(i){return i.id===id;});
+  if(!inv)return;
+  var m=g('edit-modal');
+  var b=g('edit-modal-body');
+  // Build company options
+  var coOpts=COS.map(function(c){return '<option value="'+c.id+'"'+(inv.company===c.id?' selected':'')+'>'+c.name+'</option>';}).join('');
+  // Build cost cat options
+  var catOpts=COST_CATS.map(function(c){return '<option value="'+c.id+'"'+(inv.costCat===c.id?' selected':'')+'>'+c.icon+' '+c.label+'</option>';}).join('');
+  // Build vehicle checkboxes
+  var vehChk=FLEET.map(function(v){
+    var chk=(inv.vehicles&&inv.vehicles.indexOf(v)>=0)?'checked':'';
+    return '<label style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-family:var(--mono)">'
+      +'<input type="checkbox" '+chk+' value="'+v+'" class="em-veh" style="accent-color:var(--accent)"> '+v+'</label>';
+  }).join('');
+  var lbl='<label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">';
+  var inp='style="width:100%;padding:8px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;font-family:var(--font);box-sizing:border-box"';
+  var sel='style="width:100%;padding:8px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;font-family:var(--font);box-sizing:border-box"';
+  var row2='style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"';
+  b.innerHTML=
+    '<div '+row2+'>'
+      +'<div>'+lbl+'Firma</label><select id="em-co" '+sel+'>'+coOpts+'</select></div>'
+      +'<div>'+lbl+'Typ</label><select id="em-type" '+sel+'><option value="buy"'+(inv.type==='buy'?' selected':'')+'>Zakup (koszt)</option><option value="sale"'+(inv.type==='sale'?' selected':'')+'>Sprzedaz (przychod)</option></select></div>'
+    +'</div>'
+    +'<div '+row2+'>'
+      +'<div>'+lbl+'Numer faktury</label><input id="em-num" '+inp+' value="'+(inv.num||'')+'"></div>'
+      +'<div>'+lbl+'Data wystawienia</label><input type="date" id="em-date" '+inp+' value="'+(inv.date||'')+'"></div>'
+    +'</div>'
+    +'<div '+row2+'>'
+      +'<div>'+lbl+'Kontrahent</label><input id="em-contractor" '+inp+' value="'+(inv.contractor||'').replace(/"/g,'&quot;')+'"></div>'
+      +'<div>'+lbl+'Termin platnosci</label><input type="date" id="em-due" '+inp+' value="'+(inv.dueDate||'')+'"></div>'
+    +'</div>'
+    +'<div '+row2+'>'
+      +'<div>'+lbl+'Kwota brutto PLN</label><input type="number" id="em-brutto" '+inp+' value="'+(inv.brutto||0)+'"></div>'
+      +'<div>'+lbl+'Stawka VAT %</label><select id="em-vat" '+sel+'>'
+        +[0,5,8,23].map(function(v){return '<option value="'+v+'"'+(inv.vatRate===v?' selected':'')+'>'+v+'%</option>';}).join('')
+      +'</select></div>'
+    +'</div>'
+    +'<div style="margin-bottom:12px">'+lbl+'Kategoria kosztu</label><select id="em-cat" '+sel+'><option value="">— brak —</option>'+catOpts+'</select></div>'
+    +'<div style="margin-bottom:12px">'+lbl+'Pojazdy</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="em-vehs">'+vehChk+'</div></div>'
+    +'<div style="margin-bottom:20px">'+lbl+'Opis</label><input id="em-desc" '+inp+' value="'+(inv.description||'').replace(/"/g,'&quot;')+'"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+      +'<button onclick="closeEditModal()" style="padding:8px 18px;border-radius:8px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Anuluj</button>'
+      +'<button onclick="saveEditModal(\''+id+'\')" style="padding:8px 20px;border-radius:8px;border:0.5px solid var(--accent);background:rgba(45,224,200,.15);color:var(--accent);cursor:pointer;font-size:13px;font-weight:700">&#10003; Zapisz zmiany</button>'
+    +'</div>';
+  m.style.display='block';
+  document.body.style.overflow='hidden';
+}
+
+function closeEditModal(){
+  g('edit-modal').style.display='none';
+  document.body.style.overflow='';
+}
+
+function saveEditModal(id){
+  var inv=invs.find(function(i){return i.id===id;});
+  if(!inv)return;
+  var vehs=[];
+  document.querySelectorAll('.em-veh:checked').forEach(function(cb){vehs.push(cb.value);});
+  var brutto=parseFloat(document.getElementById('em-brutto').value)||0;
+  inv.company=document.getElementById('em-co').value;
+  inv.type=document.getElementById('em-type').value;
+  inv.num=document.getElementById('em-num').value;
+  inv.date=document.getElementById('em-date').value;
+  inv.contractor=document.getElementById('em-contractor').value;
+  inv.dueDate=document.getElementById('em-due').value||null;
+  inv.brutto=brutto;
+  inv.vatRate=parseInt(document.getElementById('em-vat').value)||0;
+  inv.costCat=document.getElementById('em-cat').value||null;
+  inv.vehicles=vehs;
+  inv.description=document.getElementById('em-desc').value;
+  save();
+  closeEditModal();
+  renderCur();
+  renderTree();
+}
+
+// Close modal on backdrop click
+document.addEventListener('click',function(e){
+  if(e.target===g('edit-modal'))closeEditModal();
+});
+
 function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();}
 
 function renderLedger(){
@@ -568,7 +651,7 @@ function buildTable(rows,title,color,isCosts){
     h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
     h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
     h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id="'+i.id+'" data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-    h+='<td><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td style="display:flex;gap:4px"><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" onclick="openEditModal(\''+i.id+'\')" title="Edytuj">&#9998;</button><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
     h+='<td>'+noteCell+'</td>';
     h+='</tr>';
   });
@@ -1836,5 +1919,15 @@ window.onload=function(){
   }
 };
 </script>
+
+<div id="edit-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);overflow-y:auto">
+  <div style="margin:40px auto;max-width:600px;background:var(--bg2);border:0.5px solid var(--border);border-radius:16px;padding:28px 28px 24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:700">&#9998; Edytuj fakture</div>
+      <button onclick="closeEditModal()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1">&times;</button>
+    </div>
+    <div id="edit-modal-body"></div>
+  </div>
+</div>
 </body>
 </html>

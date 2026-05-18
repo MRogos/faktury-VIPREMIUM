@@ -537,9 +537,9 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba,"netto":liczba,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":kwota}]}\nKRYTYCZNE: vehicle_breakdown=PRZESZUKAJ CALY DOK. Flota: '+_fl+'. Stare: DW1VT08=DSR80719,DW1WN03=DSR80874,DW5VX38=DSR80682. Faktury CRT/TFC/AS24/DFDS/MoveExpert maja pozycje per pojazd-wyciagnij z kwotami. Brak tablic=[]. type=sale tylko gdy wystawca=Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
+    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ wszystkie jej pozycje (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
-      model:'claude-haiku-4-5-20251001',max_tokens:2000,system:sys,
+      model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
     })});
   }).then(function(r){
@@ -581,7 +581,7 @@ function sfile(file){
       var _eq=Math.round(brutto/vehicleBreakdown.length*100)/100;
       vehicleBreakdown.forEach(function(x){x.amount=_eq;});
     }
-    // Fallback: tablice w raw_text ale AI nie dal breakdown -> rowny podzial
+    // Fallback: tablice w raw_text bez breakdown -> rowny podzial
     if(vehicleBreakdown.length===0&&autoVehicles.length>0){
       var _eq2=Math.round(brutto/autoVehicles.length*100)/100;
       autoVehicles.forEach(function(v){vehicleBreakdown.push({plate:v,amount:_eq2});});

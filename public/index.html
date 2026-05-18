@@ -531,25 +531,37 @@ function closeEditModal(){
 
 function saveEditModal(id){
   var inv=invs.find(function(i){return i.id===id;});
-  if(!inv)return;
+  if(!inv){alert('Nie znaleziono faktury');return;}
   var vehs=[];
   document.querySelectorAll('.em-veh:checked').forEach(function(cb){vehs.push(cb.value);});
-  var brutto=parseFloat(document.getElementById('em-brutto').value)||0;
   inv.company=document.getElementById('em-co').value;
   inv.type=document.getElementById('em-type').value;
   inv.num=document.getElementById('em-num').value;
   inv.date=document.getElementById('em-date').value;
   inv.contractor=document.getElementById('em-contractor').value;
   inv.dueDate=document.getElementById('em-due').value||null;
-  inv.brutto=brutto;
+  inv.brutto=parseFloat(document.getElementById('em-brutto').value)||0;
   inv.vatRate=parseInt(document.getElementById('em-vat').value)||0;
   inv.costCat=document.getElementById('em-cat').value||null;
   inv.vehicles=vehs;
   inv.description=document.getElementById('em-desc').value;
-  save();
-  closeEditModal();
-  renderCur();
-  renderTree();
+  // Save via DELETE + POST (same id)
+  var btn=document.getElementById('em-save-btn');
+  if(btn){btn.disabled=true;btn.textContent='Zapisywanie...';}
+  fetch('/api/invoices/'+id,{method:'DELETE',headers:{'x-auth-token':tok()}})
+  .then(function(){
+    return fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)});
+  })
+  .then(function(r){
+    if(!r.ok){return r.json().then(function(e){throw new Error(e.error||'Blad serwera');});}
+    closeEditModal();
+    renderCur();
+    renderTree();
+  })
+  .catch(function(e){
+    alert('Blad zapisu: '+e.message);
+    if(btn){btn.disabled=false;btn.textContent='✓ Zapisz zmiany';}
+  });
 }
 
 // Close modal on backdrop click

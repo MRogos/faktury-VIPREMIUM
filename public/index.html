@@ -891,7 +891,7 @@ function refreshComp(){
   var pb=g('pbrutto');if(pb)pb.value=pending.brutto.toFixed(2);
 }
 function saveInv(){
-  if(!pending||!pending.brutto||pending.brutto<=0){alert('Podaj kwote brutto!');return;}
+  if(!pending||pending.brutto===null||pending.brutto===undefined||pending.brutto===0){alert('Podaj kwote brutto!');return;}
 
   // Sprawdz duplikat po numerze faktury + firma
   if(pending.num && pending.num.trim() !== ''){

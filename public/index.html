@@ -177,7 +177,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <p>PDF / JPG / PNG &#8212; drag &amp; drop lub kliknij</p>
       </div>
       <input type="file" id="sfi" accept=".pdf,.jpg,.jpeg,.png,image/*" onchange="sfile(this.files[0])">
-      <div id="scan-split" style="display:none;gap:20px;align-items:flex-start">
+      <div id="scan-split" style="display:none;gap:20px;align-items:flex-start;flex-direction:row">
         <div id="sform" style="flex:1;min-width:0"></div>
         <div id="sprev" style="flex:1;min-width:0;position:sticky;top:20px"></div>
       </div>
@@ -534,7 +534,12 @@ function sdrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)sfile(f)
 
 var pendingFileURL=null;var pendingFileMime=null;
 function sfile(file){
-  pending=null;g('sform').innerHTML='';
+  pending=null;
+  // Zapisz URL do podgladu
+  if(pendingFileURL)URL.revokeObjectURL(pendingFileURL);
+  pendingFileURL=URL.createObjectURL(file);
+  pendingFileMime=file.type||'application/pdf';
+  g('sform').innerHTML='';
   setMsg('sstatus','<span class="spin">&#8635;</span> AI czyta fakture...','info');
   b64(file).then(function(data){
     var mime=file.type||'application/pdf';
@@ -695,7 +700,11 @@ function renderSForm(){
   }
   // Aktywuj split layout
   var splitEl=g('scan-split');
-  if(splitEl){splitEl.style.display='flex';g('sdropzone').style.display='none';}
+  if(splitEl){
+    splitEl.style.cssText='display:flex;gap:20px;align-items:flex-start;flex-direction:row';
+    var dz=g('sdropzone');
+    if(dz)dz.style.display='none';
+  }
   // Podglad faktury
   var prevEl=g('sprev');
   if(prevEl&&pendingFileURL){

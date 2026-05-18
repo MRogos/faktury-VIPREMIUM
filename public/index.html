@@ -869,7 +869,12 @@ function saveInv(){
   .then(function(r){
     if(!r.ok){return r.json().then(function(e){throw new Error(e.error||'Blad serwera');});}
     if(!invs.find(function(x){return x.id===inv.id;}))invs.push(inv);
-    pending=null;renderSForm();setMsg('sstatus','Faktura zaksiegowana!','ok');renderTree();
+    pending=null;
+    if(pendingFileURL){URL.revokeObjectURL(pendingFileURL);pendingFileURL=null;}
+    var sp=g('scan-split');if(sp)sp.style.display='none';
+    var dz=g('sdropzone');if(dz)dz.style.display='';
+    var sfi=g('sfi');if(sfi)sfi.value='';
+    renderSForm();setMsg('sstatus','Faktura zaksiegowana! Mozesz wrzucic kolejna.','ok');renderTree();
   })
   .catch(function(e){setMsg('sstatus','Blad: '+e.message,'err');});
 }

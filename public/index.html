@@ -512,13 +512,14 @@ function renderFirms(){
         var btnOn='padding:4px 10px;border-radius:6px;border:0.5px solid var(--accent);background:rgba(45,224,200,.12);color:var(--accent);cursor:pointer;font-size:11px;font-family:var(--font);font-weight:600;white-space:nowrap';
         h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
         h+='<span style="font-size:11px;color:var(--muted);margin-right:2px">Filtr:</span>';
-        h+='<button style="'+(activeCat==='all'?btnOn:btnBase)+'" onclick="setFirmCat(''+c.id+'','all')">Wszystkie ('+fiAll.length+')</button>';
-        h+='<button style="'+(activeCat==='sale'?btnOn:btnBase)+'" onclick="setFirmCat(''+c.id+'','sale')">📈 Przychody</button>';
-        h+='<button style="'+(activeCat==='buy'?btnOn:btnBase)+'" onclick="setFirmCat(''+c.id+'','buy')">💸 Koszty</button>';
+        var cid=c.id;
+        h+='<button style="'+(activeCat==='all'?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="all" onclick="setFirmCat(this)">Wszystkie ('+fiAll.length+')</button>';
+        h+='<button style="'+(activeCat==='sale'?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="sale" onclick="setFirmCat(this)">Przychody</button>';
+        h+='<button style="'+(activeCat==='buy'?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="buy" onclick="setFirmCat(this)">Koszty</button>';
         COST_CATS.forEach(function(cat){
           var cnt=fiAll.filter(function(i){return i.type==='buy'&&i.costCat===cat.id;}).length;
           if(cnt>0){
-            h+='<button style="'+(activeCat===cat.id?btnOn:btnBase)+'" onclick="setFirmCat(''+c.id+'',''+cat.id+'')">'+cat.icon+' '+cat.label+' ('+cnt+')</button>';
+            h+='<button style="'+(activeCat===cat.id?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="'+cat.id+'" onclick="setFirmCat(this)">'+cat.icon+' '+cat.label+' ('+cnt+')</button>';
           }
         });
         h+='</div>';
@@ -867,7 +868,7 @@ function toggleVehicle(v,checked){
   if(checked){if(pending.vehicles.indexOf(v)<0)pending.vehicles.push(v);}
   else{pending.vehicles=pending.vehicles.filter(function(x){return x!==v;});}
 }
-function setFirmCat(coId, cat){selFirmCat[coId]=cat;renderFirms();}
+function setFirmCat(btn){selFirmCat[btn.dataset.co]=btn.dataset.cat;renderFirms();}
 
 function cancelScan(){pending=null;if(pendingFileURL){URL.revokeObjectURL(pendingFileURL);pendingFileURL=null;}var sp=g('scan-split');if(sp)sp.style.display='none';var dz=g('sdropzone');if(dz)dz.style.display='';renderSForm();setMsg('sstatus','','');}
 function manualRate(val){var r=parseFloat(val)||0;pending.nbpRate=r;pending.brutto=r>0?Math.round((pending.bruttoOrig||pending.brutto)*r*100)/100:0;refreshComp();}

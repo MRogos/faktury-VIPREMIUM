@@ -255,6 +255,7 @@ var COST_CATS=[
   {id:'service', label:'Serwis',          icon:'🔧'},
   {id:'toll',    label:'Autostrady',      icon:'🛣️'},
   {id:'customs', label:'Odprawa celna',   icon:'📋'},
+  {id:'fixed',   label:'Koszty stale',    icon:'🏢'},
   {id:'other',   label:'Koszty dodatkowe',icon:'📦'}
 ];
 var invs=[],pending=null,curTab='dash',userRole='owner';
@@ -686,6 +687,16 @@ function sfile(file){
       ||allLow.indexOf('wydawnictwo bw')>=0||allLow.indexOf('wyd. bw')>=0
       ||allLow.indexOf('deklaracja')>=0)
       autoCat='customs';
+    // Koszty stale - leasing, ubezpieczenie, abonament, najem, czynsz, ksiegowosc
+    else if(allLow.indexOf('leasing')>=0||allLow.indexOf('leasin')>=0
+      ||allLow.indexOf('ubezpieczeni')>=0||allLow.indexOf('polisa')>=0||allLow.indexOf('allianz')>=0
+      ||allLow.indexOf('warta')>=0||allLow.indexOf('pzu')>=0||allLow.indexOf('ergo')>=0
+      ||allLow.indexOf('abonament')>=0||allLow.indexOf('subskrypcj')>=0
+      ||allLow.indexOf('najem')>=0||allLow.indexOf('czynsz')>=0||allLow.indexOf('dzierzaw')>=0
+      ||allLow.indexOf('ksiegowo')>=0||allLow.indexOf('rachunkowo')>=0
+      ||allLow.indexOf('telefoniczn')>=0||allLow.indexOf('internet')>=0
+      ||allLow.indexOf('viatoll')>=0||allLow.indexOf('e-toll')>=0||allLow.indexOf('etoll')>=0)
+      autoCat='fixed';
     pending={id:uid(),company:guess||'vt',guessed:!!guess,type:ai.type==='sale'?'sale':'buy',
       num:ai.num||'',date:ai.date||today(),contractor:ai.contractor||'',buyer:ai.buyer||'',
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',

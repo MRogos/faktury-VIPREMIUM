@@ -518,7 +518,7 @@ function openEditModal(id){
     +'<div style="margin-bottom:20px">'+lbl+'Opis</label><input id="em-desc" '+inp+' value="'+(inv.description||'').replace(/"/g,'&quot;')+'"></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end">'
       +'<button onclick="closeEditModal()" style="padding:8px 18px;border-radius:8px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Anuluj</button>'
-      +'<button onclick="saveEditModal(\''+id+'\')" style="padding:8px 20px;border-radius:8px;border:0.5px solid var(--accent);background:rgba(45,224,200,.15);color:var(--accent);cursor:pointer;font-size:13px;font-weight:700">&#10003; Zapisz zmiany</button>'
+      +'<button id="em-save-btn" data-id="'+id+'" onclick="saveEditModal(this.dataset.id)" style="padding:8px 20px;border-radius:8px;border:0.5px solid var(--accent);background:rgba(45,224,200,.15);color:var(--accent);cursor:pointer;font-size:13px;font-weight:700">&#10003; Zapisz zmiany</button>'
     +'</div>';
   m.style.display='block';
   document.body.style.overflow='hidden';
@@ -651,7 +651,7 @@ function buildTable(rows,title,color,isCosts){
     h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
     h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
     h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id="'+i.id+'" data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-    h+='<td style="display:flex;gap:4px"><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" onclick="openEditModal(\''+i.id+'\')" title="Edytuj">&#9998;</button><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td style="display:flex;gap:4px"><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" data-id="'+i.id+'" onclick="openEditModal(this.dataset.id)" title="Edytuj">&#9998;</button><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
     h+='<td>'+noteCell+'</td>';
     h+='</tr>';
   });
@@ -749,7 +749,7 @@ function renderFirms(){
             h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
             h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
             h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-            h+='<td><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" onclick="openEditModal(\''+i.id+'\')" title="Edytuj">&#9998;</button></td>';
+            h+='<td><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" data-id="'+i.id+'" onclick="openEditModal(this.dataset.id)" title="Edytuj">&#9998;</button></td>';
             h+='</tr>';
           });
           h+='</tbody></table></div>';

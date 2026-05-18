@@ -162,6 +162,27 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div id="ntree"></div>
   </nav>
   <main class="main">
+    <div id="period-bar" style="display:none;margin-bottom:18px">
+      <div id="period-bar-inner" style="background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;overflow:hidden">
+        <div id="period-bar-header" onclick="togglePeriodBar()" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;user-select:none">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;font-weight:600">📅 Okres:</span>
+            <span id="period-bar-label" style="font-size:13px;color:var(--accent);font-family:var(--mono);font-weight:700"></span>
+          </div>
+          <span id="period-bar-arrow" style="color:var(--muted);font-size:11px;transition:transform .2s">▼</span>
+        </div>
+        <div id="period-bar-body" style="display:none;padding:0 16px 14px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Rok:</span>
+            <div id="period-years" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Miesiac:</span>
+            <div id="period-months" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="page-dash" style="display:none">
       <h1>Dashboard</h1>
       <p class="sub" id="dash-sub">Wyniki wszystkich firm</p>
@@ -372,8 +393,85 @@ function goTab(t){
   dashEl.style.background=t==='dash'?'rgba(45,224,200,.2)':'rgba(45,224,200,.1)';
   dashEl.style.borderColor=t==='dash'?'var(--accent)':'rgba(45,224,200,.3)';
   if(vehEl){vehEl.className='tile-firms'+(t==='vehicles'?' on':'');vehEl.style.borderColor=t==='vehicles'?'var(--amber)':'rgba(240,176,96,.2)';vehEl.style.background=t==='vehicles'?'rgba(240,176,96,.15)':'rgba(240,176,96,.06)';}
+  // Show period bar on data tabs
+  var pb=g('period-bar');
+  if(pb) pb.style.display=(t==='firms'||t==='ledger'||t==='vehicles')?'block':'none';
+  updatePeriodBar();
   renderCur();
 }
+
+function updatePeriodBar(){
+  var pb=g('period-bar');
+  if(!pb||pb.style.display==='none')return;
+  // Update label
+  var lbl=g('period-bar-label');
+  if(lbl) lbl.textContent=periodLabel();
+  // Build available years from invoices
+  var years=[];
+  invs.forEach(function(i){if(i.date){var y=i.date.slice(0,4);if(years.indexOf(y)<0)years.push(y);}});
+  years.sort().reverse();
+  if(years.indexOf(selYear)<0&&selYear)years.unshift(selYear);
+  // Render year buttons
+  var btnBase='padding:5px 12px;border-radius:6px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:var(--mono);font-weight:600;transition:all .15s';
+  var btnOn='padding:5px 12px;border-radius:6px;border:0.5px solid var(--accent);background:rgba(45,224,200,.15);color:var(--accent);cursor:pointer;font-size:12px;font-family:var(--mono);font-weight:700;transition:all .15s';
+  var yr=g('period-years');
+  if(yr){
+    yr.innerHTML='';
+    years.forEach(function(y){
+      var b=document.createElement('button');
+      b.style.cssText=y===selYear?btnOn:btnBase;
+      b.textContent=y;
+      b.onclick=function(){setPeriodYear(y);};
+      yr.appendChild(b);
+    });
+  }
+  // Render month buttons
+  var mo=g('period-months');
+  if(mo){
+    mo.innerHTML='';
+    // "Caly rok" button
+    var ball=document.createElement('button');
+    ball.style.cssText=!selMonth?btnOn:btnBase;
+    ball.textContent='Caly rok';
+    ball.onclick=function(){setPeriodMonth(null);};
+    mo.appendChild(ball);
+    MN.forEach(function(name,idx){
+      var m=String(idx+1).padStart(2,'0');
+      var b=document.createElement('button');
+      b.style.cssText=m===selMonth?btnOn:btnBase;
+      b.textContent=name;
+      b.onclick=function(){setPeriodMonth(m);};
+      mo.appendChild(b);
+    });
+  }
+}
+
+function togglePeriodBar(){
+  var body=g('period-bar-body');
+  var arrow=g('period-bar-arrow');
+  if(!body)return;
+  var open=body.style.display!=='none';
+  body.style.display=open?'none':'block';
+  if(arrow)arrow.style.transform=open?'':'rotate(180deg)';
+  if(!open)updatePeriodBar();
+}
+
+function setPeriodYear(y){
+  selYear=y;
+  updatePeriodBar();
+  var lbl=g('period-bar-label');
+  if(lbl)lbl.textContent=periodLabel();
+  renderCur();
+}
+
+function setPeriodMonth(m){
+  selMonth=m;
+  updatePeriodBar();
+  var lbl=g('period-bar-label');
+  if(lbl)lbl.textContent=periodLabel();
+  renderCur();
+}
+
 function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();}
 
 function renderLedger(){
@@ -532,6 +630,26 @@ function renderFirms(){
           return i.type==='buy'&&i.costCat===activeCat;
         });
         if(fi.length){
+          // Summary bar for active filter
+          if(activeCat!=='all'){
+            var sumNetto=fi.reduce(function(a,i){return a+calcN(i.brutto,i.vatRate);},0);
+            var sumVat=fi.reduce(function(a,i){return a+calcV(i.brutto,i.vatRate);},0);
+            var sumBrutto=fi.reduce(function(a,i){return a+i.brutto;},0);
+            var sumPaid=fi.filter(function(i){return i.paid;}).reduce(function(a,i){return a+i.brutto;},0);
+            var sumUnpaid=fi.filter(function(i){return !i.paid;}).reduce(function(a,i){return a+i.brutto;},0);
+            var activeCatObj=COST_CATS.find(function(cc){return cc.id===activeCat;})||{icon:'',label:activeCat};
+            var catLabel=activeCat==='sale'?'📈 Przychody':activeCat==='buy'?'💸 Koszty':(activeCatObj.icon+' '+activeCatObj.label);
+            h+='<div style="background:rgba(45,224,200,.06);border:0.5px solid rgba(45,224,200,.2);border-radius:10px;padding:12px 16px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:16px;align-items:center">';
+            h+='<span style="font-size:12px;font-weight:700;color:var(--accent)">'+catLabel+' — '+fi.length+' faktur</span>';
+            h+='<span style="font-size:12px;color:var(--muted)">Netto: <b style="color:var(--text)">'+fmt(sumNetto)+'</b></span>';
+            h+='<span style="font-size:12px;color:var(--muted)">VAT: <b style="color:var(--text)">'+fmt(sumVat)+'</b></span>';
+            h+='<span style="font-size:12px;color:var(--muted)">Brutto: <b style="color:var(--accent);font-size:14px">'+fmt(sumBrutto)+'</b></span>';
+            if(activeCat==='buy'||COST_CATS.find(function(cc){return cc.id===activeCat;})){
+              h+='<span style="font-size:11px;color:var(--green)">✓ Oplacone: '+fmt(sumPaid)+'</span>';
+              if(sumUnpaid>0) h+='<span style="font-size:11px;color:var(--amber)">⏳ Do oplacenia: '+fmt(sumUnpaid)+'</span>';
+            }
+            h+='</div>';
+          }
           h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
           fi.forEach(function(i){
             h+='<tr><td>'+(i.date||'-')+'</td>';

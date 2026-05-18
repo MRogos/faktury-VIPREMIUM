@@ -537,7 +537,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ wszystkie jej pozycje (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
+    var sys='Jestes systemem OCR faktur transportowych. Odpowiadasz WYLACZNIE surowym JSON - zero tekstu, zero komentarzy, zero markdown. Jesli nie mozesz odczytac, zwroc JSON z pustymi polami.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ wszystkie jej pozycje (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -548,8 +548,20 @@ function sfile(file){
   }).then(function(data){
     if(!data.content)throw new Error(data.error||'Brak odpowiedzi');
     var txt=data.content.map(function(x){return x.text||'';}).join('').replace(/```json|```/g,'').trim();
+    // Extract JSON object if model returned extra text
+    var jsonMatch=txt.match(/\{[\s\S]*\}/);
+    if(jsonMatch)txt=jsonMatch[0];
     var ai;
-    try{ai=JSON.parse(txt);}catch(e){txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');if(txt.trim().slice(-1)!=='}')txt+='}';ai=JSON.parse(txt);}
+    try{ai=JSON.parse(txt);}catch(e){
+      // Try to fix truncated JSON
+      try{
+        var fixed=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');
+        if(fixed.trim().slice(-1)!=='}')fixed+='}';
+        ai=JSON.parse(fixed);
+      }catch(e2){
+        throw new Error('Model nie zwrocil poprawnego JSON. Sprobuj ponownie lub uzyj innego pliku.');
+      }
+    }
     var guess=guessCompany((ai.raw_text||'')+(ai.buyer||'')+(ai.contractor||''));
     var brutto=ai.brutto||0;
     var vr=VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23;

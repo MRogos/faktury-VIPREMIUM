@@ -735,7 +735,7 @@ function renderFirms(){
             }
             h+='</div>';
           }
-          h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
+          h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th></tr></thead><tbody>';
           fi.forEach(function(i){
             h+='<tr><td>'+(i.date||'-')+'</td>';
             h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
@@ -749,6 +749,7 @@ function renderFirms(){
             h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
             h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
             h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
+            h+='<td><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" onclick="openEditModal(\''+i.id+'\')" title="Edytuj">&#9998;</button></td>';
             h+='</tr>';
           });
           h+='</tbody></table></div>';

@@ -860,7 +860,8 @@ function toggleVehDropdown(){
 function toggleAllVehicles(){
   var allChk=document.getElementById('veh-all');
   if(!allChk)return;
-  var shouldCheck=!allChk.checked;
+  // checkbox state is already toggled by the label click before this fires
+  var shouldCheck=allChk.checked;
   if(shouldCheck){
     pending.vehicles=FLEET.slice();
   } else {

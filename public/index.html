@@ -231,6 +231,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div id="page-firms" style="display:none">
       <h1>Obliczenia firm</h1>
       <p class="sub" id="fsub"></p>
+      <div id="ffilters" style="margin-bottom:16px"></div>
       <div id="fcontent"></div>
     </div>
   </main>
@@ -499,6 +500,20 @@ function calcVatRefund(coId){
 
 function renderFirms(){
   g('fsub').textContent=coLabel()+' - '+periodLabel();
+  // Render month filter bar
+  if(g('ffilters')){
+    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+    mh+='<span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+    mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderFirms()">Caly rok</button>';
+    MONTHS.forEach(function(m,idx){
+      var pfx=selYear+'-'+m;
+      var hasFirms=invs.some(function(i){return (selCo==='all'||i.company===selCo)&&i.date&&i.date.indexOf(pfx)===0;});
+      if(!hasFirms)return;
+      mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderFirms()">'+MN[idx]+'</button>';
+    });
+    mh+='</div>';
+    g('ffilters').innerHTML=mh;
+  }
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var toShow=selCo==='all'?COS:COS.filter(function(c){return c.id===selCo;});
   toShow.forEach(function(c){if(expF[c.id]===undefined)expF[c.id]=true;});
@@ -542,6 +557,14 @@ function renderFirms(){
       }
       var fi=invs.filter(function(i){return i.company===c.id&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
       if(fi.length){
+        var fkey='ftbl_'+c.id;
+        if(expF[fkey]===undefined)expF[fkey]=(fi.length<=10);
+        var fexp=expF[fkey];
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+        h+='<div style="font-size:12px;color:var(--muted);font-weight:600">FAKTURY ('+fi.length+')</div>';
+        h+='<button class="sm" onclick="expF[\''+fkey+'\']='+(fexp?'false':'true')+';renderFirms()" style="font-size:11px">'+(fexp?'&#9650; Zwiń':'&#9660; Rozwiń')+'</button>';
+        h+='</div>';
+        if(fexp){
         h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
         fi.forEach(function(i){
           h+='<tr><td>'+(i.date||'-')+'</td>';
@@ -557,6 +580,7 @@ function renderFirms(){
           h+='</tr>';
         });
         h+='</tbody></table></div>';
+        } // end if(fexp)
       } else {
         h+='<div style="font-size:12px;opacity:.4;padding:6px 0">Brak faktur w wybranym okresie</div>';
       }

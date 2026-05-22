@@ -229,6 +229,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <h1>Ksiega</h1>
       <p class="sub" id="lsub"></p>
       <div id="lmetrics"></div>
+      <div id="lfilters" style="margin-bottom:12px"></div>
       <div id="ltable"></div>
     </div>
     <div id="page-vehicles" style="display:none">
@@ -306,6 +307,8 @@ var expCo={all:true},expYr={},expF={};
 var sel={};
 var selVeh=null;
 var selFirmCat=null;
+var selLedgerCat=null;
+var ledgerSearch='';
 var _imp=[];
 var _salesIds=[],_costsIds=[];
 
@@ -398,7 +401,7 @@ function renderTree(){
   g('ntree').innerHTML=h;
 }
 
-function tgCo(id){expCo[id]=!expCo[id];selCo=id;selMonth=null;sel={};selVeh=null;selFirmCat=null;renderTree();renderCur();}
+function tgCo(id){expCo[id]=!expCo[id];selCo=id;selMonth=null;sel={};selVeh=null;selFirmCat=null;selLedgerCat=null;ledgerSearch='';renderTree();renderCur();}
 function tgYr(coId,y){var k=coId+'_'+y;expYr[k]=!expYr[k];selCo=coId;selYear=y;selMonth=null;sel={};selVeh=null;selFirmCat=null;expCo[coId]=true;renderTree();renderCur();}
 function goMonth(coId,y,m){selCo=coId;selYear=y;selMonth=m;sel={};expCo[coId]=true;expYr[coId+'_'+y]=true;renderTree();goTab('firms');}
 
@@ -439,7 +442,42 @@ function renderLedger(){
     +'<div class="metric" style="border:0.5px solid rgba(240,176,96,.3)"><div class="ml">Do oplacenia</div><div class="mv warn">'+fmt(all.uO)+'</div></div>'
     +'</div>';
   var prefix=selYear+(selMonth?'-'+selMonth:'');
-  var filtered=invs.filter(function(i){return (selCo==='all'||i.company===selCo)&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));});
+
+  // Render search + category filter bar
+  if(g('lfilters')){
+    var _lh='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">';
+    // Wyszukiwarka
+    _lh+='<input id="lsearch-input" type="text" placeholder="&#128269; Szukaj: numer, kontrahent..." value="'+ledgerSearch.replace(/"/g,'&quot;')+'" oninput="ledgerSearch=this.value;renderLedger()" style="flex:1;min-width:200px;padding:7px 12px;background:var(--bg2);border:0.5px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">';
+    _lh+='</div>';
+    // Filtr kategorii
+    _lh+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">';
+    _lh+='<button class="sm '+(selLedgerCat===null?'on':'')+'" onclick="selLedgerCat=null;renderLedger()">Wszystkie</button>';
+    _lh+='<button class="sm '+(selLedgerCat==='sale'?'on':'')+'" onclick="selLedgerCat=\'sale\';renderLedger()">📈 Przychody</button>';
+    _lh+='<button class="sm '+(selLedgerCat==='buy'?'on':'')+'" onclick="selLedgerCat=\'buy\';renderLedger()">📉 Koszty</button>';
+    CATS.forEach(function(cat){
+      _lh+='<button class="sm '+(selLedgerCat===cat.id?'on':'')+'" onclick="selLedgerCat=\''+cat.id+'\';renderLedger()">'+cat.icon+' '+cat.label+'</button>';
+    });
+    _lh+='</div>';
+    g('lfilters').innerHTML=_lh;
+    // Przywroc focus i cursor na koniec
+    var inp=document.getElementById('lsearch-input');
+    if(inp&&document.activeElement!==inp&&ledgerSearch){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
+  }
+
+  var filtered=invs.filter(function(i){
+    if(selCo!=='all'&&i.company!==selCo)return false;
+    if(selYear&&(!i.date||i.date.indexOf(prefix)!==0))return false;
+    if(selLedgerCat==='sale')return i.type==='sale';
+    if(selLedgerCat==='buy')return i.type==='buy';
+    if(selLedgerCat)return i.type==='buy'&&i.costCat===selLedgerCat;
+    if(ledgerSearch){
+      var q=ledgerSearch.toLowerCase();
+      return (i.num||'').toLowerCase().indexOf(q)>=0
+        ||(i.contractor||'').toLowerCase().indexOf(q)>=0
+        ||(i.description||'').toLowerCase().indexOf(q)>=0;
+    }
+    return true;
+  });
   var overdueHtml=userRole==='owner'?renderOverdueAlert():'';
   if(!filtered.length){g('ltable').innerHTML=overdueHtml+'<div class="empty">Brak faktur w wybranym okresie</div>';return;}
   var sales=filtered.filter(function(i){return i.type==='sale';}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});

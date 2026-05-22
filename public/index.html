@@ -158,6 +158,14 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="tile-firms-icon">&#128665;</div>
       <div><div class="tile-firms-text" style="color:var(--amber)">Koszty per auto</div><div class="tile-firms-sub">Flota 9 pojazdow</div></div>
     </div>
+    <div class="tile-firms" id="nav-fixed" onclick="goTab('fixed')" style="margin-top:6px;border-color:rgba(255,200,80,.3)">
+      <div class="tile-firms-icon">📌</div>
+      <div><div class="tile-firms-text" style="color:var(--amber)">Koszty stale</div><div class="tile-firms-sub">Stale + ubezpieczenia</div></div>
+    </div>
+    <div class="tile-firms" id="nav-office" onclick="goTab('office')" style="margin-top:6px;border-color:rgba(180,180,255,.3)">
+      <div class="tile-firms-icon">🏢</div>
+      <div><div class="tile-firms-text" style="color:#b4b4ff">Biuro</div><div class="tile-firms-sub">Koszty biurowe</div></div>
+    </div>
     <div class="nsep">Nawigacja</div>
     <div id="ntree"></div>
   </nav>
@@ -234,6 +242,18 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <p class="sub" id="fsub"></p>
       <div id="ffilters" style="margin-bottom:16px"></div>
       <div id="fcontent"></div>
+    </div>
+    <div id="page-fixed" style="display:none">
+      <h1>Koszty stałe</h1>
+      <p class="sub" id="fixsub"></p>
+      <div id="fixfilters" style="margin-bottom:16px"></div>
+      <div id="fixcontent"></div>
+    </div>
+    <div id="page-office" style="display:none">
+      <h1>Biuro</h1>
+      <p class="sub" id="offsub"></p>
+      <div id="offfilters" style="margin-bottom:16px"></div>
+      <div id="offcontent"></div>
     </div>
   </main>
 </div>
@@ -369,7 +389,7 @@ function goMonth(coId,y,m){selCo=coId;selYear=y;selMonth=m;sel={};expCo[coId]=tr
 
 function goTab(t){
   curTab=t;
-  ['scan','import','ledger','firms','dash','vehicles'].forEach(function(id){
+  ['scan','import','ledger','firms','dash','vehicles','fixed','office'].forEach(function(id){
     g('page-'+id).style.display=id===t?'':'none';
     if(id==='ledger') g('nav-'+id).className='ni'+(id===t?' on':'');
   });
@@ -382,7 +402,7 @@ function goTab(t){
   if(vehEl){vehEl.className='tile-firms'+(t==='vehicles'?' on':'');vehEl.style.borderColor=t==='vehicles'?'var(--amber)':'rgba(240,176,96,.2)';vehEl.style.background=t==='vehicles'?'rgba(240,176,96,.15)':'rgba(240,176,96,.06)';}
   renderCur();
 }
-function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();}
+function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();if(curTab==='fixed')renderFixed();if(curTab==='office')renderOffice();}
 
 function renderLedger(){
   g('lsub').textContent=coLabel()+' - '+periodLabel();
@@ -486,6 +506,161 @@ function buildTable(rows,title,color,isCosts){
   });
   h+='</tbody></table></div></div>';
   return h;
+}
+
+function renderFixed(){
+  g('fixsub').textContent=periodLabel()+' • Koszty stale i ubezpieczenia';
+  var prefix=selYear+(selMonth?'-'+selMonth:'');
+  // Selektor miesiecy
+  if(g('fixfilters')){
+    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+    mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderFixed()">Caly rok</button>';
+    MONTHS.forEach(function(m,mi){
+      var pfx=selYear+'-'+m;
+      var has=invs.some(function(i){return i.costCat==='fixed'&&i.date&&i.date.indexOf(pfx)===0;});
+      if(!has)return;
+      mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderFixed()">'+MN[mi]+'</button>';
+    });
+    mh+='</div>';
+    g('fixfilters').innerHTML=mh;
+  }
+  var fixInvs=invs.filter(function(i){
+    return i.costCat==='fixed'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
+  }).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+
+  var h='';
+  if(!fixInvs.length){g('fixcontent').innerHTML='<div class="empty">Brak kosztow stalych w wybranym okresie</div>';return;}
+
+  // Tabela per auto - ile kosztow stalych przypada na kazde auto w miesiacu
+  // Grupuj faktury: all->rowno na 9, plate->na konkretne auto, insurance->brutto/12 na auto lub rowno
+  var vehMonth={};
+  FLEET.forEach(function(v){vehMonth[v]={total:0,items:[]};});
+
+  fixInvs.forEach(function(inv){
+    var con=(inv.contractor||'').toLowerCase();
+    var desc=(inv.description||'').toLowerCase();
+    var allLow=con+' '+desc;
+
+    // Ubezpieczenie roczne - dziel przez 12
+    var isIns=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
+    var monthlyBrutto=isIns?Math.round(inv.brutto/12*100)/100:inv.brutto;
+
+    // Ustal sposob podziau
+    var splitMode='all';
+    var _fk=Object.keys(FIXED_SUPPLIERS).find(function(k){return allLow.indexOf(k)>=0;});
+    if(_fk)splitMode=FIXED_SUPPLIERS[_fk].split;
+
+    // Jesli ma przypisane pojazdy - uzyj vehicle breakdown lub vehicles
+    if(inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
+      inv.vehicleBreakdown.forEach(function(vb){
+        if(vehMonth[vb.plate]){
+          var amt=isIns?Math.round((vb.amount||monthlyBrutto/inv.vehicleBreakdown.length)/12*100)/100:(vb.amount||0);
+          if(!amt)amt=Math.round(monthlyBrutto/inv.vehicleBreakdown.length*100)/100;
+          vehMonth[vb.plate].total+=amt;
+          vehMonth[vb.plate].items.push({inv:inv,amt:amt,isIns:isIns});
+        }
+      });
+    } else if(splitMode==='plate'&&inv.vehicles&&inv.vehicles.length){
+      var perVeh=Math.round(monthlyBrutto/inv.vehicles.length*100)/100;
+      inv.vehicles.forEach(function(v){
+        if(vehMonth[v]){
+          vehMonth[v].total+=perVeh;
+          vehMonth[v].items.push({inv:inv,amt:perVeh,isIns:isIns});
+        }
+      });
+    } else {
+      // Rowno na wszystkie auta
+      var perVeh2=Math.round(monthlyBrutto/FLEET.length*100)/100;
+      FLEET.forEach(function(v){
+        vehMonth[v].total+=perVeh2;
+        vehMonth[v].items.push({inv:inv,amt:perVeh2,isIns:isIns});
+      });
+    }
+  });
+
+  // Render tabela per auto
+  h+='<div class="card" style="margin-bottom:16px">';
+  h+='<div style="font-weight:700;font-size:14px;margin-bottom:12px;color:var(--amber)">📌 Koszty stałe per auto'+(selMonth?' - '+MN[parseInt(selMonth)-1]+' '+selYear:' - '+selYear+' (suma)')+'</div>';
+  h+='<div class="tw"><table><thead><tr><th>AUTO</th><th style="text-align:right">KWOTA MIESIĘCZNA</th><th style="text-align:right">Ubezpieczenia/12</th><th style="text-align:right">Leasing/Inne</th></tr></thead><tbody>';
+  var grandTotal=0;
+  FLEET.forEach(function(v){
+    var d=vehMonth[v];
+    var insAmt=d.items.filter(function(x){return x.isIns;}).reduce(function(a,x){return a+x.amt;},0);
+    var othAmt=d.items.filter(function(x){return !x.isIns;}).reduce(function(a,x){return a+x.amt;},0);
+    grandTotal+=d.total;
+    h+='<tr><td style="font-family:var(--mono);font-weight:600;color:var(--amber)">'+v+'</td>';
+    h+='<td style="text-align:right;font-weight:700">'+fmt(d.total)+'</td>';
+    h+='<td style="text-align:right;color:var(--muted)">'+( insAmt>0?fmt(insAmt):'-')+'</td>';
+    h+='<td style="text-align:right;color:var(--muted)">'+(othAmt>0?fmt(othAmt):'-')+'</td></tr>';
+  });
+  h+='<tr style="border-top:1px solid var(--border)"><td style="font-weight:700">SUMA</td><td style="text-align:right;font-weight:700;color:var(--accent)">'+fmt(grandTotal)+'</td><td></td><td></td></tr>';
+  h+='</tbody></table></div></div>';
+
+  // Lista faktur
+  h+='<div class="card"><div style="font-weight:700;font-size:13px;margin-bottom:10px">Faktury ('+fixInvs.length+')</div>';
+  h+='<div class="tw"><table><thead><tr><th>Data</th><th>Kontrahent</th><th>Opis</th><th>Pojazdy</th><th style="text-align:right">Brutto</th><th style="text-align:right">Mies./auto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
+  fixInvs.forEach(function(inv){
+    var isIns=INSURANCE_KEYWORDS.some(function(k){return (inv.contractor+' '+inv.description).toLowerCase().indexOf(k)>=0;});
+    var montly=isIns?fmt(Math.round(inv.brutto/12*100)/100)+'/mies':'–';
+    var vehs=(inv.vehicles&&inv.vehicles.length)?inv.vehicles.join(', '):'wszystkie';
+    h+='<tr>';
+    h+='<td>'+(inv.date||'-')+'</td>';
+    h+='<td style="max-width:160px;font-size:12px">'+(inv.contractor||'-').slice(0,35)+(isIns?' 🛡️':'')+'</td>';
+    h+='<td style="max-width:200px;font-size:11px;color:var(--muted)">'+(inv.description||'-').slice(0,50)+'</td>';
+    h+='<td style="font-size:11px;color:var(--amber)">'+vehs+'</td>';
+    h+='<td style="text-align:right;font-weight:600">'+fmt(inv.brutto)+'</td>';
+    h+='<td style="text-align:right;font-size:11px;color:var(--muted)">'+montly+'</td>';
+    h+='<td style="text-align:center"><input type="checkbox" class="chk-paid" '+(inv.paid?'checked':'')+' onchange="fetch(\'/api/invoices/'+inv.id+'/paid\',{method:\'PATCH\',headers:ah(),body:JSON.stringify({paid:this.checked})}).then(function(){loadInvs();})"></td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div>';
+
+  g('fixcontent').innerHTML=h;
+}
+
+function renderOffice(){
+  g('offsub').textContent=periodLabel()+' • Koszty biurowe';
+  var prefix=selYear+(selMonth?'-'+selMonth:'');
+  if(g('offfilters')){
+    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+    mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderOffice()">Caly rok</button>';
+    MONTHS.forEach(function(m,mi){
+      var pfx=selYear+'-'+m;
+      var has=invs.some(function(i){return i.costCat==='office'&&i.date&&i.date.indexOf(pfx)===0;});
+      if(!has)return;
+      mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderOffice()">'+MN[mi]+'</button>';
+    });
+    mh+='</div>';
+    g('offfilters').innerHTML=mh;
+  }
+  var offInvs=invs.filter(function(i){
+    return i.costCat==='office'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
+  }).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+
+  if(!offInvs.length){g('offcontent').innerHTML='<div class="empty">Brak kosztow biurowych w wybranym okresie</div>';return;}
+
+  var total=offInvs.reduce(function(a,i){return a+i.brutto;},0);
+  var perVeh=Math.round(total/FLEET.length*100)/100;
+
+  var h='<div class="card" style="margin-bottom:16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  h+='<div style="font-weight:700;font-size:14px;color:#b4b4ff">🏢 Koszty biurowe'+(selMonth?' - '+MN[parseInt(selMonth)-1]+' '+selYear:' - '+selYear)+'</div>';
+  h+='<div style="text-align:right"><div style="font-size:11px;color:var(--muted)">Suma</div><div style="font-weight:700;font-size:16px">'+fmt(total)+'</div></div></div>';
+  h+='<div style="background:rgba(180,180,255,.06);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">';
+  h+='<span style="color:var(--muted)">Per pojazd ('+FLEET.length+' aut): </span><span style="font-weight:700;color:#b4b4ff">'+fmt(perVeh)+' / auto</span></div>';
+  h+='<div class="tw"><table><thead><tr><th>Data</th><th>Kontrahent</th><th>Opis</th><th style="text-align:right">Netto</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
+  offInvs.forEach(function(inv){
+    var n=Math.round(inv.brutto/(1+(inv.vatRate||0)/100)*100)/100;
+    h+='<tr><td>'+(inv.date||'-')+'</td>';
+    h+='<td style="font-size:12px">'+(inv.contractor||'-').slice(0,35)+'</td>';
+    h+='<td style="font-size:11px;color:var(--muted)">'+(inv.description||'-').slice(0,50)+'</td>';
+    h+='<td style="text-align:right">'+fmt(n)+'</td>';
+    h+='<td style="text-align:right;font-weight:600">'+fmt(inv.brutto)+'</td>';
+    h+='<td style="text-align:center"><input type="checkbox" class="chk-paid" '+(inv.paid?'checked':'')+' onchange="fetch(\'/api/invoices/'+inv.id+'/paid\',{method:\'PATCH\',headers:ah(),body:JSON.stringify({paid:this.checked})}).then(function(){loadInvs();})"></td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div>';
+  g('offcontent').innerHTML=h;
 }
 
 function calcVatRefund(coId){
@@ -663,10 +838,12 @@ function sfile(file){
       var _eq2=Math.round(brutto/autoVehicles.length*100)/100;
       autoVehicles.forEach(function(v){vehicleBreakdown.push({plate:v,amount:_eq2});});
     }
-    var autoCat='other';
     var contLow=(ai.contractor||'').toLowerCase();
     var descLow=(ai.description||'').toLowerCase();
     var allLow=contLow+' '+descLow;
+    var _fixedKey=Object.keys(FIXED_SUPPLIERS).find(function(k){return allLow.indexOf(k)>=0;});
+    var _isInsurance=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
+    var _isOffice=allLow.indexOf('biuro')>=0||allLow.indexOf('artykul')>=0||allLow.indexOf('papier')>=0||allLow.indexOf('toner')>=0||allLow.indexOf('druk')>=0;
     // Promy - Move Expert, DFDS, Stena, trasy promowe
     if(allLow.indexOf('move expert')>=0||allLow.indexOf('moveexpert')>=0
       ||allLow.indexOf('dfds')>=0||allLow.indexOf('stena')>=0
@@ -710,6 +887,9 @@ function sfile(file){
       ||allLow.indexOf('wydawnictwo bw')>=0||allLow.indexOf('wyd. bw')>=0
       ||allLow.indexOf('deklaracja')>=0)
       autoCat='customs';
+    // Override z fixed/office jesli wykryto
+    if(_fixedKey||_isInsurance) autoCat='fixed';
+    if(_isOffice&&autoCat==='other') autoCat='office';
     pending={id:uid(),company:guess||'vt',guessed:!!guess,type:ai.type==='sale'?'sale':'buy',
       num:ai.num||'',date:ai.date||today(),contractor:ai.contractor||'',buyer:ai.buyer||'',
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',

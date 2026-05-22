@@ -177,12 +177,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <p>PDF / JPG / PNG &#8212; drag &amp; drop lub kliknij</p>
       </div>
       <input type="file" id="sfi" accept=".pdf,.jpg,.jpeg,.png,image/*" onchange="sfile(this.files[0])">
-      <div style="display:flex;gap:16px;align-items:flex-start">
-        <div id="sform" style="flex:1;min-width:0"></div>
-        <div id="sprev" style="width:180px;flex-shrink:0;display:none;position:sticky;top:20px">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Podglad</div>
-          <div id="sprev-pages"></div>
-        </div>
+      <div id="sform"></div>
+      <div id="sprev" style="display:none;margin-top:24px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">&#128196; Podglad faktury</div>
+        <div id="sprev-pages"></div>
       </div>
     </div>
     <div id="page-import" style="display:none">
@@ -578,12 +576,12 @@ function sfile(file){
   if(file.type==='application/pdf'){
     var _emb=document.createElement('embed');
     _emb.src=_objUrl;_emb.type='application/pdf';
-    _emb.style.cssText='width:180px;height:260px;border-radius:6px;border:0.5px solid var(--border);display:block;margin-bottom:8px';
+    _emb.style.cssText='width:100%;height:700px;border-radius:8px;border:0.5px solid var(--border);display:block';
     g('sprev-pages').appendChild(_emb);
     g('sprev').style.display='block';
   } else if(file.type.indexOf('image')===0){
     var _pi=document.createElement('img');
-    _pi.src=_objUrl;_pi.style.cssText='width:180px;border-radius:6px;border:0.5px solid var(--border)';
+    _pi.src=_objUrl;_pi.style.cssText='width:100%;border-radius:8px;border:0.5px solid var(--border)';
     g('sprev-pages').appendChild(_pi);
     g('sprev').style.display='block';
   }
@@ -594,7 +592,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ wszystkie jej pozycje (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
+    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich jej pozycji (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma BRUTTO. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -1589,7 +1587,15 @@ function renderVehicles(){
       var vb=inv.vehicleBreakdown.find(function(x){return x.plate===veh;});
       if(vb){
         var amt=parseFloat(vb.amount)||0;
-        return (inv.currency&&inv.currency!=='PLN'&&inv.nbpRate&&amt>0)?Math.round(amt*inv.nbpRate*100)/100:amt;
+        if(amt<=0) return 0;
+        var rate=(inv.currency&&inv.currency!=='PLN'&&inv.nbpRate)?inv.nbpRate:1;
+        // Skaluj proporcjonalnie do brutto faktury (naprawia netto vs brutto z AI)
+        var bdTotal=inv.vehicleBreakdown.reduce(function(a,x){return a+(parseFloat(x.amount)||0);},0);
+        if(bdTotal>0&&inv.brutto>0){
+          var ratio=amt/bdTotal;
+          return Math.round(inv.brutto*ratio*100)/100;
+        }
+        return Math.round(amt*rate*100)/100;
       }
     }
     if(!inv.vehicles||inv.vehicles.length===0) return 0;

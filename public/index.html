@@ -871,6 +871,13 @@ function sfile(file){
     }catch(e){throw new Error('AI zwrocil nieprawidlowy JSON: '+txt.slice(0,80));}
     var guess=guessCompany((ai.raw_text||'')+(ai.buyer||'')+(ai.contractor||''));
     var brutto=ai.brutto||0;
+    // Sprawdz czy faktura ma VAT n/p (nie podlega) lub odwrotne obciazenie
+    var _rawVatRate=ai.vat_rate;
+    var _rawText=(ai.raw_text||'').toLowerCase();
+    var _isNP=_rawText.indexOf('n/p')>=0||_rawText.indexOf('nie podlega')>=0
+      ||_rawText.indexOf('odwrotne obci')>=0||_rawText.indexOf('reverse charge')>=0
+      ||_rawText.indexOf('art. 28')>=0||_rawText.indexOf('0.00 eur')>=0&&_rawText.indexOf('vat')>=0;
+    if(_isNP||_rawVatRate===0||String(_rawVatRate).indexOf('n')>=0) _rawVatRate=0;
     var _vatByCountry={GB:20,UK:20,DE:19,FR:20,BE:21,NL:21,IE:23,PL:23};
     var _aiCountry=(ai.vat_country||'').toUpperCase();
     if(!_aiCountry){var _vn=(ai.contractor||'')+' '+(ai.raw_text||'');
@@ -884,7 +891,8 @@ function sfile(file){
     else if(_con.indexOf('as24')>=0||_con.indexOf('tfc')>=0)_aiCountry='FR';
     if(_aiCountry&&!ai.vat_country)ai.vat_country=_aiCountry;
     var _forcedRate=_vatByCountry[_aiCountry];
-    var vr=_forcedRate||(VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23);
+    // Jesli n/p - zawsze 0, nie nadpisuj
+    var vr=_isNP?0:(_forcedRate||(VATS.indexOf(_rawVatRate)>=0?_rawVatRate:23));
     // Auto-detect cost category and vehicles from contractor/description
     var autoVehicles=[];
     var rawText=(ai.raw_text||'')+(ai.description||'')+(ai.contractor||'');

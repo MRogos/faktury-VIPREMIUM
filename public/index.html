@@ -245,7 +245,7 @@ var COS=[{id:'vt',name:'VIPREMIUM TRANSPORT LTD',short:'VT Ltd'},{id:'pt',name:'
 var CNAV=[{id:'all',name:'Wszystkie firmy',icon:'&#127970;'},{id:'vt',name:'VT Ltd',icon:'&#128665;'},{id:'pt',name:'PT&L',icon:'&#128653;'},{id:'et',name:'ET&VG',icon:'&#128663;'},{id:'vr',name:'VMR Warsztat',icon:'&#128295;'}];
 var MONTHS=['01','02','03','04','05','06','07','08','09','10','11','12'];
 var MN=['Styczen','Luty','Marzec','Kwiecien','Maj','Czerwiec','Lipiec','Sierpien','Wrzesien','Pazdziernik','Listopad','Grudzien'];
-var VATS=[0,5,8,23];
+var VATS=[0,5,8,19,20,21,23];
 
 var FLEET=['DW7MP83','DW6RS03','DWLTA36','WPR8462U','WGM9808M','DSWTF32','DSR80719','DSR80682','DSR80874'];
 var PLATE_ALIASES={'DW1VT08':'DSR80719','DW1WN03':'DSR80874','DW5VX38':'DSR80682'};
@@ -392,7 +392,6 @@ function renderLedger(){
     +'<div class="metric"><div class="ml">Koszty brutto</div><div class="mv">'+fmt(all.gO)+'</div></div>'
     +'<div class="metric"><div class="ml">Wynik netto</div><div class="mv '+(all.bal>=0?'pos':'neg')+'">'+fmt(all.bal)+'</div></div>'
     +'<div class="metric"><div class="ml">VAT do zaplaty</div><div class="mv '+(all.vatDue>0?'warn':all.vatDue<0?'pos':'')+'">'+fmt(all.vatDue)+'</div></div>'
-    +(function(){var vr=calcVatRefund('all');var vrKeys=Object.keys(vr);if(!vrKeys.length)return '';var tot=vrKeys.reduce(function(a,k){return a+vr[k].amount;},0);return '<div class="metric" style="border:0.5px solid rgba(45,224,200,.3)"><div class="ml">VAT zagr. do zwrotu</div><div class="mv" style="color:var(--accent)">'+fmt(tot)+'</div></div>';})()
     +'<div class="metric" style="border:0.5px solid rgba(96,200,144,.3)"><div class="ml">Koszty oplacone</div><div class="mv pos">'+fmt(all.pO)+'</div></div>'
     +'<div class="metric" style="border:0.5px solid rgba(240,176,96,.3)"><div class="ml">Do oplacenia</div><div class="mv warn">'+fmt(all.uO)+'</div></div>'
     +'</div>';
@@ -429,7 +428,7 @@ function buildTable(rows,title,color,isCosts){
   h+='</div>';
   h+='<div class="tw"><table><thead><tr>';
   h+='<th style="width:32px;text-align:center"><input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+varName+')" title="Zaznacz wszystkie"></th>';
-  h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th><th>Notatka</th>';
+  h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th style="text-align:center;width:28px"></th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th><th>Notatka</th>';
   h+='</tr></thead><tbody>';
   function makeDueCell(inv){
     var days=999;
@@ -460,16 +459,20 @@ function buildTable(rows,title,color,isCosts){
     h+='<td>'+(i.date||'-')+'</td>';
     h+='<td style="text-align:center">'+dueCell+'</td>';
     h+='<td>'+(co?co.short:'?')+'</td>';
+    var _cat=CATS.find(function(x){return x.id===i.costCat;});
+    h+='<td style="text-align:center;font-size:13px" title="'+(_cat?_cat.label:'')+'">'+(_cat&&i.type==='buy'?_cat.icon:'')+'</td>';
     h+='<td style="font-family:var(--font);max-width:220px">'
       +dot
       +(i.num?'<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
       +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||i.description||'-').slice(0,40)+nbp+'</div>'
       +'</td>';
     h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
-    h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%'+(i.vatCountry&&i.vatCountry!=='PL'?' <span style="font-size:10px;color:var(--accent);font-weight:700">'+i.vatCountry+'</span>':'')+'</td>';
+    h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
     h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
     h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id="'+i.id+'" data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-    h+='<td><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td style="white-space:nowrap">';
+    if(userRole==='owner'){h+='<button class="sm" style="margin-right:3px" data-id="'+i.id+'" data-action="edit" onclick="onBtnClick(event)">&#9998;</button>';}
+    h+='<button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
     h+='<td>'+noteCell+'</td>';
     h+='</tr>';
   });
@@ -480,41 +483,23 @@ function buildTable(rows,title,color,isCosts){
 function calcVatRefund(coId){
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var fi=invs.filter(function(i){
-    return i.type==='buy'&&i.costCat==='fuel'
-      &&i.vatCountry&&i.vatCountry!=='PL'
-      &&i.vatAmount&&i.vatAmount>0
-      &&(coId==='all'||i.company===coId)
+    return i.type==='buy'&&i.costCat==='fuel'&&i.vatCountry&&i.vatCountry!=='PL'
+      &&i.vatAmount&&i.vatAmount>0&&(coId==='all'||i.company===coId)
       &&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
   });
-  // Grupuj per kraj
-  var byCountry={};
+  var byC={};
   fi.forEach(function(i){
     var cc=i.vatCountry;
-    if(!byCountry[cc])byCountry[cc]={country:cc,amount:0,currency:'PLN',invs:[]};
-    // vatAmount jest w walucie faktury - przelicz na PLN
-    var amtPLN=i.vatAmount*(i.nbpRate||1);
-    byCountry[cc].amount+=Math.round(amtPLN*100)/100;
-    byCountry[cc].invs.push(i);
+    if(!byC[cc])byC[cc]={country:cc,amount:0,invs:[]};
+    byC[cc].amount+=Math.round((i.vatAmount*(i.nbpRate||1))*100)/100;
+    byC[cc].invs.push(i);
   });
-  return byCountry;
+  return byC;
 }
 
 function renderFirms(){
   g('fsub').textContent=coLabel()+' - '+periodLabel();
-  // Render month filter bar
-  if(g('ffilters')){
-    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
-    mh+='<span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
-    mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderFirms()">Caly rok</button>';
-    MONTHS.forEach(function(m,idx){
-      var pfx=selYear+'-'+m;
-      var hasFirms=invs.some(function(i){return (selCo==='all'||i.company===selCo)&&i.date&&i.date.indexOf(pfx)===0;});
-      if(!hasFirms)return;
-      mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderFirms()">'+MN[idx]+'</button>';
-    });
-    mh+='</div>';
-    g('ffilters').innerHTML=mh;
-  }
+  if(g('ffilters')){var _mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';_mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderFirms()">Caly rok</button>';MONTHS.forEach(function(m,idx){var pfx=selYear+'-'+m;var has=invs.some(function(i){return (selCo==='all'||i.company===selCo)&&i.date&&i.date.indexOf(pfx)===0;});if(!has)return;_mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderFirms()">'+MN[idx]+'</button>';});_mh+='</div>';g('ffilters').innerHTML=_mh;}
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var toShow=selCo==='all'?COS:COS.filter(function(c){return c.id===selCo;});
   toShow.forEach(function(c){if(expF[c.id]===undefined)expF[c.id]=true;});
@@ -542,30 +527,21 @@ function renderFirms(){
       h+='<div class="vr"><span style="opacity:.6">VAT naliczony (zakupy)</span><span style="color:var(--green)">- '+fmt(s.vO)+'</span></div>';
       h+='<div class="vr"><span>VAT do zaplaty (JPK)</span><span style="color:'+(s.vatDue>0?'var(--amber)':s.vatDue<0?'var(--green)':'inherit')+'">'+fmt(s.vatDue)+'</span></div>';
       h+='</div>';
-      // VAT zagraniczny do zwrotu
-      var vr=calcVatRefund(c.id);
-      var vrKeys=Object.keys(vr);
-      if(vrKeys.length>0){
-        var vrTotal=vrKeys.reduce(function(a,k){return a+vr[k].amount;},0);
+      var _vr=calcVatRefund(c.id);var _vrK=Object.keys(_vr);
+      if(_vrK.length>0){
+        var _vrT=_vrK.reduce(function(a,k){return a+_vr[k].amount;},0);
+        var _cN={DE:'Niemcy 19%',GB:'UK 20%',FR:'Francja 20%',BE:'Belgia 21%',NL:'Holandia 21%'};
         h+='<div style="margin-bottom:14px;border:0.5px solid rgba(45,224,200,.25);border-radius:8px;padding:10px 14px">';
         h+='<div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px">&#128178; VAT ZAGRANICZNY DO ZWROTU</div>';
-        vrKeys.forEach(function(k){
-          var countryNames={DE:'Niemcy (19%)',GB:'UK (20%)',FR:'Francja (20%)',BE:'Belgia (21%)',NL:'Holandia (21%)',IE:'Irlandia (23%)'};
-          h+='<div class="vr"><span style="opacity:.7">'+(countryNames[k]||k)+' ('+vr[k].invs.length+' faktur)</span><span style="color:var(--accent)">'+fmt(vr[k].amount)+'</span></div>';
-        });
-        h+='<div class="vr" style="border-top:0.5px solid rgba(45,224,200,.2);margin-top:6px;padding-top:6px"><span style="font-weight:700">RAZEM do odzyskania</span><span style="color:var(--accent);font-weight:700">'+fmt(vrTotal)+'</span></div>';
+        _vrK.forEach(function(k){h+='<div class="vr"><span style="opacity:.7">'+(_cN[k]||k)+' ('+_vr[k].invs.length+' fakt.)</span><span style="color:var(--accent)">'+fmt(_vr[k].amount)+'</span></div>';});
+        h+='<div class="vr" style="border-top:0.5px solid rgba(45,224,200,.2);margin-top:4px;padding-top:4px"><span style="font-weight:700">RAZEM</span><span style="color:var(--accent);font-weight:700">'+fmt(_vrT)+'</span></div>';
         h+='</div>';
       }
       var fi=invs.filter(function(i){return i.company===c.id&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
       if(fi.length){
-        var fkey='ftbl_'+c.id;
-        if(expF[fkey]===undefined)expF[fkey]=(fi.length<=10);
-        var fexp=expF[fkey];
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-        h+='<div style="font-size:12px;color:var(--muted);font-weight:600">FAKTURY ('+fi.length+')</div>';
-        h+='<button class="sm" onclick="expF[\''+fkey+'\']='+(fexp?'false':'true')+';renderFirms()" style="font-size:11px">'+(fexp?'&#9650; Zwiń':'&#9660; Rozwiń')+'</button>';
-        h+='</div>';
-        if(fexp){
+        var _fk='ftbl_'+c.id;if(expF[_fk]===undefined)expF[_fk]=(fi.length<=10);var _fe=expF[_fk];
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:12px;color:var(--muted);font-weight:600">FAKTURY ('+fi.length+')</div><button class="sm" onclick="expF[\''+_fk+'\']='+(! _fe)+';renderFirms()">'+(_fe?'&#9650; Zwiń':'&#9660; Rozwiń')+'</button></div>';
+        if(_fe){
         h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
         fi.forEach(function(i){
           h+='<tr><td>'+(i.date||'-')+'</td>';
@@ -575,13 +551,13 @@ function renderFirms(){
             +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||'-').slice(0,38)+'</div>'
             +'</td>';
           h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
-          h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%'+(i.vatCountry&&i.vatCountry!=='PL'?' <span style="font-size:10px;color:var(--accent);font-weight:700">'+i.vatCountry+'</span>':'')+'</td>';
+          h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
           h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
           h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
           h+='</tr>';
         });
         h+='</tbody></table></div>';
-        } // end if(fexp)
+        }
       } else {
         h+='<div style="font-size:12px;opacity:.4;padding:6px 0">Brak faktur w wybranym okresie</div>';
       }
@@ -597,18 +573,15 @@ function sdrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)sfile(f)
 function sfile(file){
   pending=null;g('sform').innerHTML='';
   g('sprev').style.display='none';g('sprev-pages').innerHTML='';
-  var _objUrl=URL.createObjectURL(file);
+  var _ou=URL.createObjectURL(file);
   if(file.type==='application/pdf'){
-    var _emb=document.createElement('embed');
-    _emb.src=_objUrl;_emb.type='application/pdf';
-    _emb.style.cssText='width:100%;height:700px;border-radius:8px;border:0.5px solid var(--border);display:block';
-    g('sprev-pages').appendChild(_emb);
-    g('sprev').style.display='block';
+    var _e=document.createElement('embed');_e.src=_ou;_e.type='application/pdf';
+    _e.style.cssText='width:100%;height:700px;border-radius:8px;border:0.5px solid var(--border);display:block';
+    g('sprev-pages').appendChild(_e);g('sprev').style.display='block';
   } else if(file.type.indexOf('image')===0){
-    var _pi=document.createElement('img');
-    _pi.src=_objUrl;_pi.style.cssText='width:100%;border-radius:8px;border:0.5px solid var(--border)';
-    g('sprev-pages').appendChild(_pi);
-    g('sprev').style.display='block';
+    var _pi=document.createElement('img');_pi.src=_ou;
+    _pi.style.cssText='width:100%;border-radius:8px;border:0.5px solid var(--border)';
+    g('sprev-pages').appendChild(_pi);g('sprev').style.display='block';
   }
   setMsg('sstatus','<span class="spin">&#8635;</span> AI czyta fakture...','info');
   b64(file).then(function(data){
@@ -617,7 +590,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po, zero komentarzy, zero wstepow. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich jej pozycji (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma BRUTTO. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
+    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total_brutto,"netto":liczba_total_netto,"vat_rate":liczba,"vat_amount":kwota_VAT,"vat_country":"kod_kraju","currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_brutto}]}\nKRYTYCZNE: vat_country=kraj wystawcy (DE/GB/FR/BE/NL/PL). vat_amount=kwota VAT z faktury. vehicle_breakdown: przejrzyj KAZDA strone, znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich pozycji. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -630,37 +603,27 @@ function sfile(file){
     var txt=data.content.map(function(x){return x.text||'';}).join('').replace(/```json|```/g,'').trim();
     var ai;
     try{
-      // Wytnij JSON nawet jesli Sonnet dodal prose przed/po
-      var _jsonMatch=txt.match(/\{[\s\S]*\}/);
-      if(_jsonMatch)txt=_jsonMatch[0];
+      var _jm=txt.match(/\{[\s\S]*\}/);if(_jm)txt=_jm[0];
       txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');
       if(txt.trim().slice(-1)!=='}')txt+='}';
       ai=JSON.parse(txt);
     }catch(e){throw new Error('AI zwrocil nieprawidlowy JSON: '+txt.slice(0,80));}
     var guess=guessCompany((ai.raw_text||'')+(ai.buyer||'')+(ai.contractor||''));
     var brutto=ai.brutto||0;
-    // Kraj z AI lub wykryty z numeru VAT wystawcy / adresu
     var _vatByCountry={GB:20,UK:20,DE:19,FR:20,BE:21,NL:21,IE:23,PL:23};
     var _aiCountry=(ai.vat_country||'').toUpperCase();
-    // Wykryj kraj z numeru VAT kontrahenta jesli AI nie podal
-    if(!_aiCountry){
-      var _vatNum=(ai.contractor||'')+' '+(ai.raw_text||'');
-      if(/\bGB\s*\d|VAT.*GB|GB\d{9}/i.test(_vatNum)) _aiCountry='GB';
-      else if(/\bDE\s*\d|USt.*DE|DE\d{9}/i.test(_vatNum)) _aiCountry='DE';
-      else if(/\bFR\s*[A-Z0-9]|TVA.*FR/i.test(_vatNum)) _aiCountry='FR';
-      else if(/\bBE\s*\d|BTW.*BE/i.test(_vatNum)) _aiCountry='BE';
-      else if(/\bNL\s*[A-Z0-9]/i.test(_vatNum)) _aiCountry='NL';
+    if(!_aiCountry){var _vn=(ai.contractor||'')+' '+(ai.raw_text||'');
+      if(/\bGB[\s\d]|VAT.*GB|GB\d{9}/i.test(_vn))_aiCountry='GB';
+      else if(/\bDE[\s\d]|USt.*DE|DE\d{9}/i.test(_vn))_aiCountry='DE';
+      else if(/\bFR[\s\d]|TVA.*FR/i.test(_vn))_aiCountry='FR';
     }
-    // Hardcode znane firmy
-    var _contractor=(ai.contractor||'').toLowerCase();
-    if(_contractor.indexOf('morgan fuel')>=0||_contractor.indexOf('morgan fuels')>=0) _aiCountry='GB';
-    else if(_contractor.indexOf('staack')>=0||_contractor.indexOf('tankpool')>=0) _aiCountry='DE';
-    else if(_contractor.indexOf('as24')>=0) _aiCountry='FR';
-    else if(_contractor.indexOf('tfc')>=0) _aiCountry='FR';
+    var _con=(ai.contractor||'').toLowerCase();
+    if(_con.indexOf('morgan fuel')>=0)_aiCountry='GB';
+    else if(_con.indexOf('staack')>=0||_con.indexOf('tankpool')>=0)_aiCountry='DE';
+    else if(_con.indexOf('as24')>=0||_con.indexOf('tfc')>=0)_aiCountry='FR';
+    if(_aiCountry&&!ai.vat_country)ai.vat_country=_aiCountry;
     var _forcedRate=_vatByCountry[_aiCountry];
-    var vr=_forcedRate||( VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23 );
-    // Zaktualizuj vat_country w ai jesli wykryty
-    if(_aiCountry&&!ai.vat_country) ai.vat_country=_aiCountry;
+    var vr=_forcedRate||(VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23);
     // Auto-detect cost category and vehicles from contractor/description
     var autoVehicles=[];
     var rawText=(ai.raw_text||'')+(ai.description||'')+(ai.contractor||'');
@@ -672,7 +635,7 @@ function sfile(file){
         if(autoVehicles.indexOf(newPlate)<0)autoVehicles.push(newPlate);
       }
     });
-    // Use AI vehicle_breakdown if available
+    // Use AI vehicle_breakdown
     var vehicleBreakdown=[];
     if(ai.vehicle_breakdown&&ai.vehicle_breakdown.length){
       ai.vehicle_breakdown.forEach(function(vb){
@@ -684,12 +647,10 @@ function sfile(file){
         }
       });
     }
-    // Fallback: AI znalazl tablice bez kwot -> rowny podzial
     if(vehicleBreakdown.length>0&&!vehicleBreakdown.some(function(x){return x.amount>0;})){
       var _eq=Math.round(brutto/vehicleBreakdown.length*100)/100;
       vehicleBreakdown.forEach(function(x){x.amount=_eq;});
     }
-    // Fallback: tablice w raw_text bez breakdown -> rowny podzial
     if(vehicleBreakdown.length===0&&autoVehicles.length>0){
       var _eq2=Math.round(brutto/autoVehicles.length*100)/100;
       autoVehicles.forEach(function(v){vehicleBreakdown.push({plate:v,amount:_eq2});});
@@ -746,7 +707,8 @@ function sfile(file){
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',
       nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:ai.confidence||'medium',
       bruttoOrig:null,paid:false,dueDate:ai.due_date||null,note:null,
-      costCat:autoCat,vehicles:autoVehicles,vehicleBreakdown:vehicleBreakdown};
+      costCat:autoCat,vehicles:autoVehicles,vehicleBreakdown:vehicleBreakdown,
+      vatCountry:ai.vat_country||null,vatAmount:parseFloat(ai.vat_amount)||null};
     if(pending.currency!=='PLN'){
       setMsg('sstatus','<span class="spin">&#8635;</span> Pobieram kurs NBP...','info');
       return fetch('/api/nbp/'+pending.currency+'/'+pending.date).then(function(r){
@@ -1358,6 +1320,63 @@ function onBtnClick(e){
   var id=el.getAttribute('data-id');
   var action=el.getAttribute('data-action');
   if(action==='del') delInv(id);
+  if(action==='edit') openEdit(id);
+}
+
+function openEdit(id){
+  var inv=invs.find(function(x){return x.id===id;});
+  if(!inv) return;
+  var m=document.getElementById('edit-modal');
+  if(!m){m=document.createElement('div');m.id='edit-modal';document.body.appendChild(m);}
+  m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
+  var catOpts=CATS.map(function(ct){return '<option value="'+ct.id+'"'+(inv.costCat===ct.id?' selected':'')+'>'+ct.icon+' '+ct.label+'</option>';}).join('');
+  var vehOpts=FLEET.map(function(v){return '<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;font-size:12px"><input type="checkbox" value="'+v+'"'+(inv.vehicles&&inv.vehicles.indexOf(v)>=0?' checked':'')+'>'+v+'</label>';}).join('');
+  m.innerHTML='<div style="background:var(--bg1);border:0.5px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><div style="font-weight:700;font-size:16px">&#9998; Edycja faktury</div><button class="sm" onclick="closeEdit()">&#10005;</button></div>'
+    +'<div class="g2" style="gap:10px;margin-bottom:10px">'
+    +'<div class="fg"><label>Numer faktury</label><input id="ei-num" type="text" value="'+esc(inv.num||'')+'"></div>'
+    +'<div class="fg"><label>Data wystawienia</label><input id="ei-date" type="date" value="'+(inv.date||'')+'"></div>'
+    +'</div>'
+    +'<div class="fg" style="margin-bottom:10px"><label>Kontrahent</label><input id="ei-con" type="text" value="'+esc(inv.contractor||'')+'"></div>'
+    +'<div class="g2" style="gap:10px;margin-bottom:10px">'
+    +'<div class="fg"><label>Kwota brutto PLN</label><input id="ei-brutto" type="number" step="0.01" value="'+(inv.brutto||0)+'"></div>'
+    +'<div class="fg"><label>Stawka VAT</label><select id="ei-vat">'+VATS.map(function(r){return '<option value="'+r+'"'+(inv.vatRate===r?' selected':'')+'>'+r+'%</option>';}).join('')+'</select></div>'
+    +'</div>'
+    +'<div class="g2" style="gap:10px;margin-bottom:10px">'
+    +'<div class="fg"><label>Kategoria kosztu</label><select id="ei-cat">'+catOpts+'</select></div>'
+    +'<div class="fg"><label>Termin platnosci</label><input id="ei-due" type="date" value="'+(inv.dueDate||'')+'"></div>'
+    +'</div>'
+    +'<div class="fg" style="margin-bottom:10px"><label>Pojazdy</label><div style="padding:8px;background:var(--bg2);border-radius:6px;border:0.5px solid var(--border)">'+vehOpts+'</div></div>'
+    +'<div class="fg" style="margin-bottom:16px"><label>Notatka</label><input id="ei-note" type="text" value="'+esc(inv.note||'')+'"></div>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end">'
+    +'<button class="sm" onclick="closeEdit()">Anuluj</button>'
+    +'<button class="btn" onclick="saveEdit(\''+id+'\')">Zapisz zmiany</button>'
+    +'</div>'
+    +'</div>';
+}
+
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function closeEdit(){var m=document.getElementById('edit-modal');if(m)m.style.display='none';}
+
+function saveEdit(id){
+  var inv=invs.find(function(x){return x.id===id;});
+  if(!inv) return;
+  inv.num=document.getElementById('ei-num').value;
+  inv.date=document.getElementById('ei-date').value;
+  inv.contractor=document.getElementById('ei-con').value;
+  inv.brutto=parseFloat(document.getElementById('ei-brutto').value)||0;
+  inv.vatRate=parseInt(document.getElementById('ei-vat').value)||0;
+  inv.costCat=document.getElementById('ei-cat').value;
+  inv.dueDate=document.getElementById('ei-due').value||null;
+  inv.note=document.getElementById('ei-note').value||null;
+  var checked=document.querySelectorAll('#edit-modal input[type=checkbox]:checked');
+  inv.vehicles=Array.from(checked).map(function(x){return x.value;});
+  closeEdit();
+  fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)})
+  .then(function(r){return r.json();})
+  .then(function(){loadInvs();})
+  .catch(function(e){alert('Blad zapisu: '+e.message);});
 }
 function toggleFirm(el){
   var id=el.getAttribute('data-co');
@@ -1596,20 +1615,7 @@ function exportCSV(){
 
 function renderVehicles(){
   g('vsub').textContent=periodLabel()+' • '+FLEET.length+' pojazdow';
-  // Selektor miesiecy
-  if(g('vfilters')){
-    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
-    mh+='<span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
-    mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderVehicles()">Caly rok</button>';
-    MONTHS.forEach(function(m,idx){
-      var pfx=selYear+'-'+m;
-      var has=invs.some(function(i){return i.type==='buy'&&i.date&&i.date.indexOf(pfx)===0;});
-      if(!has)return;
-      mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderVehicles()">'+MN[idx]+'</button>';
-    });
-    mh+='</div>';
-    g('vfilters').innerHTML=mh;
-  }
+  if(g('vfilters')){var _mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';_mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderVehicles()">Caly rok</button>';MONTHS.forEach(function(m,idx){var pfx=selYear+'-'+m;var has=invs.some(function(i){return i.type==='buy'&&i.date&&i.date.indexOf(pfx)===0;});if(!has)return;_mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderVehicles()">'+MN[idx]+'</button>';});_mh+='</div>';g('vfilters').innerHTML=_mh;}
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var buyInvs=invs.filter(function(i){
     return i.type==='buy'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
@@ -1634,13 +1640,9 @@ function renderVehicles(){
       if(vb){
         var amt=parseFloat(vb.amount)||0;
         if(amt<=0) return 0;
-        var rate=(inv.currency&&inv.currency!=='PLN'&&inv.nbpRate)?inv.nbpRate:1;
-        // Skaluj proporcjonalnie do brutto faktury (naprawia netto vs brutto z AI)
         var bdTotal=inv.vehicleBreakdown.reduce(function(a,x){return a+(parseFloat(x.amount)||0);},0);
-        if(bdTotal>0&&inv.brutto>0){
-          var ratio=amt/bdTotal;
-          return Math.round(inv.brutto*ratio*100)/100;
-        }
+        if(bdTotal>0&&inv.brutto>0) return Math.round(inv.brutto*(amt/bdTotal)*100)/100;
+        var rate=(inv.currency&&inv.currency!=='PLN'&&inv.nbpRate)?inv.nbpRate:1;
         return Math.round(amt*rate*100)/100;
       }
     }

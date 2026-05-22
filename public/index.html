@@ -592,7 +592,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich jej pozycji (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma BRUTTO. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
+    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po, zero komentarzy, zero wstepow. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich jej pozycji (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma BRUTTO. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -604,7 +604,14 @@ function sfile(file){
     if(!data.content)throw new Error(data.error||'Brak odpowiedzi');
     var txt=data.content.map(function(x){return x.text||'';}).join('').replace(/```json|```/g,'').trim();
     var ai;
-    try{ai=JSON.parse(txt);}catch(e){txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');if(txt.trim().slice(-1)!=='}')txt+='}';ai=JSON.parse(txt);}
+    try{
+      // Wytnij JSON nawet jesli Sonnet dodal prose przed/po
+      var _jsonMatch=txt.match(/\{[\s\S]*\}/);
+      if(_jsonMatch)txt=_jsonMatch[0];
+      txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');
+      if(txt.trim().slice(-1)!=='}')txt+='}';
+      ai=JSON.parse(txt);
+    }catch(e){throw new Error('AI zwrocil nieprawidlowy JSON: '+txt.slice(0,80));}
     var guess=guessCompany((ai.raw_text||'')+(ai.buyer||'')+(ai.contractor||''));
     var brutto=ai.brutto||0;
     // Kraj z AI lub wykryty z numeru VAT wystawcy / adresu

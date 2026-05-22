@@ -589,7 +589,11 @@ function sfile(file){
     try{ai=JSON.parse(txt);}catch(e){txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');if(txt.trim().slice(-1)!=='}')txt+='}';ai=JSON.parse(txt);}
     var guess=guessCompany((ai.raw_text||'')+(ai.buyer||'')+(ai.contractor||''));
     var brutto=ai.brutto||0;
-    var vr=VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23;
+    // Poprawna stawka VAT wg kraju wystawcy - nadpisz co AI zwrocil
+    var _vatByCountry={GB:20,UK:20,DE:19,FR:20,BE:21,NL:21,IE:23,PL:23};
+    var _aiCountry=(ai.vat_country||'').toUpperCase();
+    var _forcedRate=_vatByCountry[_aiCountry];
+    var vr=_forcedRate||( VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23 );
     // Auto-detect cost category and vehicles from contractor/description
     var autoVehicles=[];
     var rawText=(ai.raw_text||'')+(ai.description||'')+(ai.contractor||'');

@@ -617,7 +617,8 @@ function renderFixed(){
   fixInvs.forEach(function(inv){
     var isIns=INSURANCE_KEYWORDS.some(function(k){return (inv.contractor+' '+inv.description).toLowerCase().indexOf(k)>=0;});
     var montly=isIns?fmt(Math.round(inv.brutto/12*100)/100)+'/mies':'–';
-    var vehs=(inv.vehicles&&inv.vehicles.length)?inv.vehicles.join(', '):'wszystkie';
+    var _fleetVehs=(inv.vehicles||[]).filter(function(v){return FLEET.indexOf(v)>=0;});
+    var vehs=(_fleetVehs.length&&_fleetVehs.length<FLEET.length)?_fleetVehs.join(', '):'wszystkie';
     h+='<tr>';
     h+='<td>'+(inv.date||'-')+'</td>';
     h+='<td style="max-width:160px;font-size:12px">'+(inv.contractor||'-').slice(0,35)+(isIns?' 🛡️':'')+'</td>';
@@ -1904,16 +1905,25 @@ function renderVehicles(){
         var allLow=(i.contractor||'').toLowerCase()+' '+(i.description||'').toLowerCase();
         var isIns=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
         var mb=isIns?Math.round(i.brutto/12*100)/100:i.brutto;
+        var fleetV=(i.vehicles||[]).filter(function(v){return FLEET.indexOf(v)>=0;});
         if(i.vehicleBreakdown&&i.vehicleBreakdown.length){
           var vb=i.vehicleBreakdown.find(function(x){return x.plate===veh;});
-          if(vb){cats['fixed']+=isIns?Math.round(i.brutto/12/i.vehicleBreakdown.length*100)/100:(vb.amount||Math.round(mb/i.vehicleBreakdown.length*100)/100);}
-        } else {cats['fixed']+=Math.round(mb/(i.vehicles&&i.vehicles.length?i.vehicles.length:FLEET.length)*100)/100;}
+          if(vb&&FLEET.indexOf(vb.plate)>=0){
+            cats['fixed']+=isIns?Math.round(i.brutto/12/i.vehicleBreakdown.length*100)/100:(vb.amount||Math.round(mb/i.vehicleBreakdown.length*100)/100);
+          }
+        } else if(fleetV.length>0&&fleetV.indexOf(veh)>=0){
+          cats['fixed']+=Math.round(mb/fleetV.length*100)/100;
+        }
         return;
       }
       var share=getVehShare(i,veh);
       if(cats[cat]!==undefined)cats[cat]+=share;else cats['other']+=share;
     });
-    buyInvs.filter(function(i){return i.costCat==='fixed'&&(!i.vehicles||!i.vehicles.length);}).forEach(function(i){
+    buyInvs.filter(function(i){
+      if(i.costCat!=='fixed')return false;
+      var fleetVehs=(i.vehicles||[]).filter(function(v){return FLEET.indexOf(v)>=0;});
+      return fleetVehs.length===0;
+    }).forEach(function(i){
       var allLow=(i.contractor||'').toLowerCase()+' '+(i.description||'').toLowerCase();
       var isIns=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
       cats['fixed']+=Math.round((isIns?i.brutto/12:i.brutto)/FLEET.length*100)/100;

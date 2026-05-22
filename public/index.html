@@ -1638,7 +1638,11 @@ function getForeignVatAmount(inv){
 
 function isHalfVatInv(inv){
   var txt = ((inv.description||'')+(inv.contractor||'')+(inv.num||'')).toUpperCase();
-  return HALF_VAT_KEYWORDS.some(function(kw){ return txt.indexOf(kw) >= 0; });
+  // Sprawdz tez tablice rejestracyjne w vehicles array
+  var plates = (inv.vehicles||[]).join(' ').toUpperCase();
+  var vbPlates = (inv.vehicleBreakdown||[]).map(function(x){return x.plate||'';}).join(' ').toUpperCase();
+  var allTxt = txt+' '+plates+' '+vbPlates;
+  return HALF_VAT_KEYWORDS.some(function(kw){ return allTxt.indexOf(kw) >= 0; });
 }
 
 // Nadpisuje calcV dla faktur z autami osobowymi

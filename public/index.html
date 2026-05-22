@@ -1815,7 +1815,9 @@ function renderVehicles(){
     {id:'ferry',  label:'Promy',      icon:'🚢'},
     {id:'service',label:'Serwis',     icon:'🔧'},
     {id:'toll',   label:'Autostrady', icon:'🛣️'},
-    {id:'other',  label:'Inne',       icon:'📦'}
+    {id:'other',  label:'Inne',       icon:'📦'},
+    {id:'fixed',  label:'Koszty stale',icon:'📌'},
+    {id:'office', label:'Biuro',      icon:'🏢'}
   ];
   // Customs split equally across all vehicles
   var customsTotal=buyInvs.filter(function(i){return i.costCat==='customs';})
@@ -1845,10 +1847,34 @@ function renderVehicles(){
     COLS.forEach(function(c){cats[c.id]=0;});
     vehInvs.forEach(function(i){
       var cat=(i.costCat==='customs')?'other':(i.costCat||'other');
+      // fixed i office nie wchodza przez getVehShare - maja osobna logike
+      if(cat==='fixed'||cat==='office'){return;}
       var share=getVehShare(i,veh);
       if(cats[cat]!==undefined) cats[cat]+=share;
       else cats['other']+=share;
     });
+    // Koszty stale - per auto z logika fixed
+    var fixInvsAll=buyInvs.filter(function(i){return i.costCat==='fixed';});
+    fixInvsAll.forEach(function(inv){
+      var con=(inv.contractor||'').toLowerCase();
+      var allLow=con+' '+(inv.description||'').toLowerCase();
+      var isIns=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
+      var monthlyBrutto=isIns?Math.round(inv.brutto/12*100)/100:inv.brutto;
+      // Ustal podzia
+      if(inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
+        var vb=inv.vehicleBreakdown.find(function(x){return x.plate===veh;});
+        if(vb){var amt=isIns?Math.round(inv.brutto/12/inv.vehicleBreakdown.length*100)/100:(vb.amount||Math.round(monthlyBrutto/inv.vehicleBreakdown.length*100)/100);cats['fixed']+=amt;}
+      } else if(inv.vehicles&&inv.vehicles.length&&inv.vehicles.indexOf(veh)>=0){
+        cats['fixed']+=Math.round(monthlyBrutto/inv.vehicles.length*100)/100;
+      } else {
+        // Rowno na wszystkie auta
+        cats['fixed']+=Math.round(monthlyBrutto/FLEET.length*100)/100;
+      }
+    });
+    // Biuro - rowno na wszystkie auta
+    var offInvsAll=buyInvs.filter(function(i){return i.costCat==='office';});
+    var offTotal=offInvsAll.reduce(function(a,i){return a+i.brutto;},0);
+    cats['office']=Math.round(offTotal/FLEET.length*100)/100;
     cats['customs']=customsPerVeh;
     var total=COLS.reduce(function(a,c){return a+cats[c.id];},0)+customsPerVeh;
     return {veh:veh,cats:cats,total:total};
@@ -1881,7 +1907,8 @@ function renderVehicles(){
     h+='<td style="padding:10px 12px;font-family:var(--mono);font-weight:700;color:var(--amber);white-space:nowrap">'+d.veh+'</td>';
     COLS.forEach(function(c){
       var val=d.cats[c.id]||0;
-      h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);color:'+(val>0?'var(--red)':'var(--muted)')+'">'+(val>0?fmt(val):'-')+'</td>';
+      var clr=val>0?(c.id==='fixed'?'var(--amber)':c.id==='office'?'#b4b4ff':'var(--red)'):'var(--muted)';
+      h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);color:'+clr+'">'+(val>0?fmt(val):'-')+'</td>';
     });
     h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);color:'+(customsPerVeh>0?'var(--red)':'var(--muted)')+'">'+( customsPerVeh>0?fmt(customsPerVeh):'-')+'</td>';
     h+='<td style="text-align:right;padding:10px 12px;font-family:var(--mono);font-weight:700;color:var(--amber)">'+fmt(d.total)+'</td>';

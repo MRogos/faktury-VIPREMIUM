@@ -162,27 +162,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div id="ntree"></div>
   </nav>
   <main class="main">
-    <div id="period-bar" style="display:none;margin-bottom:18px">
-      <div id="period-bar-inner" style="background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;overflow:hidden">
-        <div id="period-bar-header" onclick="togglePeriodBar()" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;user-select:none">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:13px;font-weight:600">📅 Okres:</span>
-            <span id="period-bar-label" style="font-size:13px;color:var(--accent);font-family:var(--mono);font-weight:700"></span>
-          </div>
-          <span id="period-bar-arrow" style="color:var(--muted);font-size:11px;transition:transform .2s">▼</span>
-        </div>
-        <div id="period-bar-body" style="display:none;padding:0 16px 14px">
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Rok:</span>
-            <div id="period-years" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Miesiac:</span>
-            <div id="period-months" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-          </div>
-        </div>
-      </div>
-    </div>
     <div id="page-dash" style="display:none">
       <h1>Dashboard</h1>
       <p class="sub" id="dash-sub">Wyniki wszystkich firm</p>
@@ -192,17 +171,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <h1>Skanuj fakture</h1>
       <p class="sub">Przeciagnij PDF lub zdjecie &#8212; AI odczyta dane automatycznie</p>
       <div id="sstatus"></div>
-      <div class="drop" onclick="document.getElementById('sfi').click()" ondragover="event.preventDefault();this.classList.add('ov')" ondragleave="this.classList.remove('ov')" ondrop="this.classList.remove('ov');sdrop(event)" id="sdropzone">
+      <div class="drop" onclick="document.getElementById('sfi').click()" ondragover="event.preventDefault();this.classList.add('ov')" ondragleave="this.classList.remove('ov')" ondrop="this.classList.remove('ov');sdrop(event)">
         <span style="font-size:32px;display:block;margin-bottom:8px">&#11014;</span>
         <b>Wrzuc fakture tutaj</b>
         <p>PDF / JPG / PNG &#8212; drag &amp; drop lub kliknij</p>
       </div>
       <input type="file" id="sfi" accept=".pdf,.jpg,.jpeg,.png,image/*" onchange="sfile(this.files[0])">
-      <div id="scan-split" style="display:none;gap:20px;align-items:flex-start;flex-direction:row">
-        <div id="sform" style="flex:1;min-width:0"></div>
-        <div id="sprev" style="flex:1;min-width:0;position:sticky;top:20px"></div>
-      </div>
-      <div id="sform-solo"></div>
+      <div id="sform"></div>
     </div>
     <div id="page-import" style="display:none">
       <h1>Import XLSX / PDF</h1>
@@ -276,16 +251,12 @@ var COST_CATS=[
   {id:'service', label:'Serwis',          icon:'🔧'},
   {id:'toll',    label:'Autostrady',      icon:'🛣️'},
   {id:'customs', label:'Odprawa celna',   icon:'📋'},
-  {id:'fixed',   label:'Koszty stale',    icon:'🏢'},
-  {id:'office',  label:'Biuro',           icon:'🖥️'},
-  {id:'workshop',label:'Warsztat',         icon:'🔩'},
   {id:'other',   label:'Koszty dodatkowe',icon:'📦'}
 ];
 var invs=[],pending=null,curTab='dash',userRole='owner';
 var selCo='all',selYear=String(new Date().getFullYear()),selMonth=String(new Date().getMonth()+1).padStart(2,'0');
 var expCo={all:true},expYr={},expF={};
 var sel={};
-var selFirmCat={}; // per company category filter: co.id -> 'all'|'sale'|'buy'|costCat
 var _imp=[];
 var _salesIds=[],_costsIds=[];
 
@@ -395,180 +366,8 @@ function goTab(t){
   dashEl.style.background=t==='dash'?'rgba(45,224,200,.2)':'rgba(45,224,200,.1)';
   dashEl.style.borderColor=t==='dash'?'var(--accent)':'rgba(45,224,200,.3)';
   if(vehEl){vehEl.className='tile-firms'+(t==='vehicles'?' on':'');vehEl.style.borderColor=t==='vehicles'?'var(--amber)':'rgba(240,176,96,.2)';vehEl.style.background=t==='vehicles'?'rgba(240,176,96,.15)':'rgba(240,176,96,.06)';}
-  // Show period bar on data tabs
-  var pb=g('period-bar');
-  if(pb) pb.style.display=(t==='firms'||t==='ledger'||t==='vehicles')?'block':'none';
-  updatePeriodBar();
   renderCur();
 }
-
-function updatePeriodBar(){
-  var pb=g('period-bar');
-  if(!pb||pb.style.display==='none')return;
-  // Update label
-  var lbl=g('period-bar-label');
-  if(lbl) lbl.textContent=periodLabel();
-  // Build available years from invoices
-  var years=[];
-  invs.forEach(function(i){if(i.date){var y=i.date.slice(0,4);if(years.indexOf(y)<0)years.push(y);}});
-  years.sort().reverse();
-  if(years.indexOf(selYear)<0&&selYear)years.unshift(selYear);
-  // Render year buttons
-  var btnBase='padding:5px 12px;border-radius:6px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:var(--mono);font-weight:600;transition:all .15s';
-  var btnOn='padding:5px 12px;border-radius:6px;border:0.5px solid var(--accent);background:rgba(45,224,200,.15);color:var(--accent);cursor:pointer;font-size:12px;font-family:var(--mono);font-weight:700;transition:all .15s';
-  var yr=g('period-years');
-  if(yr){
-    yr.innerHTML='';
-    years.forEach(function(y){
-      var b=document.createElement('button');
-      b.style.cssText=y===selYear?btnOn:btnBase;
-      b.textContent=y;
-      b.onclick=function(){setPeriodYear(y);};
-      yr.appendChild(b);
-    });
-  }
-  // Render month buttons
-  var mo=g('period-months');
-  if(mo){
-    mo.innerHTML='';
-    // "Caly rok" button
-    var ball=document.createElement('button');
-    ball.style.cssText=!selMonth?btnOn:btnBase;
-    ball.textContent='Caly rok';
-    ball.onclick=function(){setPeriodMonth(null);};
-    mo.appendChild(ball);
-    MN.forEach(function(name,idx){
-      var m=String(idx+1).padStart(2,'0');
-      var b=document.createElement('button');
-      b.style.cssText=m===selMonth?btnOn:btnBase;
-      b.textContent=name;
-      b.onclick=function(){setPeriodMonth(m);};
-      mo.appendChild(b);
-    });
-  }
-}
-
-function togglePeriodBar(){
-  var body=g('period-bar-body');
-  var arrow=g('period-bar-arrow');
-  if(!body)return;
-  var open=body.style.display!=='none';
-  body.style.display=open?'none':'block';
-  if(arrow)arrow.style.transform=open?'':'rotate(180deg)';
-  if(!open)updatePeriodBar();
-}
-
-function setPeriodYear(y){
-  selYear=y;
-  updatePeriodBar();
-  var lbl=g('period-bar-label');
-  if(lbl)lbl.textContent=periodLabel();
-  renderCur();
-}
-
-function setPeriodMonth(m){
-  selMonth=m;
-  updatePeriodBar();
-  var lbl=g('period-bar-label');
-  if(lbl)lbl.textContent=periodLabel();
-  renderCur();
-}
-
-
-function openEditModal(id){
-  var inv=invs.find(function(i){return i.id===id;});
-  if(!inv)return;
-  var m=g('edit-modal');
-  var b=g('edit-modal-body');
-  // Build company options
-  var coOpts=COS.map(function(c){return '<option value="'+c.id+'"'+(inv.company===c.id?' selected':'')+'>'+c.name+'</option>';}).join('');
-  // Build cost cat options
-  var catOpts=COST_CATS.map(function(c){return '<option value="'+c.id+'"'+(inv.costCat===c.id?' selected':'')+'>'+c.icon+' '+c.label+'</option>';}).join('');
-  // Build vehicle checkboxes
-  var vehChk=FLEET.map(function(v){
-    var chk=(inv.vehicles&&inv.vehicles.indexOf(v)>=0)?'checked':'';
-    return '<label style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;font-family:var(--mono)">'
-      +'<input type="checkbox" '+chk+' value="'+v+'" class="em-veh" style="accent-color:var(--accent)"> '+v+'</label>';
-  }).join('');
-  var lbl='<label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">';
-  var inp='style="width:100%;padding:8px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;font-family:var(--font);box-sizing:border-box"';
-  var sel='style="width:100%;padding:8px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;font-family:var(--font);box-sizing:border-box"';
-  var row2='style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"';
-  b.innerHTML=
-    '<div '+row2+'>'
-      +'<div>'+lbl+'Firma</label><select id="em-co" '+sel+'>'+coOpts+'</select></div>'
-      +'<div>'+lbl+'Typ</label><select id="em-type" '+sel+'><option value="buy"'+(inv.type==='buy'?' selected':'')+'>Zakup (koszt)</option><option value="sale"'+(inv.type==='sale'?' selected':'')+'>Sprzedaz (przychod)</option></select></div>'
-    +'</div>'
-    +'<div '+row2+'>'
-      +'<div>'+lbl+'Numer faktury</label><input id="em-num" '+inp+' value="'+(inv.num||'')+'"></div>'
-      +'<div>'+lbl+'Data wystawienia</label><input type="date" id="em-date" '+inp+' value="'+(inv.date||'')+'"></div>'
-    +'</div>'
-    +'<div '+row2+'>'
-      +'<div>'+lbl+'Kontrahent</label><input id="em-contractor" '+inp+' value="'+(inv.contractor||'').replace(/"/g,'&quot;')+'"></div>'
-      +'<div>'+lbl+'Termin platnosci</label><input type="date" id="em-due" '+inp+' value="'+(inv.dueDate||'')+'"></div>'
-    +'</div>'
-    +'<div '+row2+'>'
-      +'<div>'+lbl+'Kwota brutto PLN</label><input type="number" id="em-brutto" '+inp+' value="'+(inv.brutto||0)+'"></div>'
-      +'<div>'+lbl+'Stawka VAT %</label><select id="em-vat" '+sel+'>'
-        +[0,5,8,23].map(function(v){return '<option value="'+v+'"'+(inv.vatRate===v?' selected':'')+'>'+v+'%</option>';}).join('')
-      +'</select></div>'
-    +'</div>'
-    +'<div style="margin-bottom:12px">'+lbl+'Kategoria kosztu</label><select id="em-cat" '+sel+'><option value="">— brak —</option>'+catOpts+'</select></div>'
-    +'<div style="margin-bottom:12px">'+lbl+'Pojazdy</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="em-vehs">'+vehChk+'</div></div>'
-    +'<div style="margin-bottom:20px">'+lbl+'Opis</label><input id="em-desc" '+inp+' value="'+(inv.description||'').replace(/"/g,'&quot;')+'"></div>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
-      +'<button onclick="closeEditModal()" style="padding:8px 18px;border-radius:8px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Anuluj</button>'
-      +'<button id="em-save-btn" data-id="'+id+'" onclick="saveEditModal(this.dataset.id)" style="padding:8px 20px;border-radius:8px;border:0.5px solid var(--accent);background:rgba(45,224,200,.15);color:var(--accent);cursor:pointer;font-size:13px;font-weight:700">&#10003; Zapisz zmiany</button>'
-    +'</div>';
-  m.style.display='block';
-  document.body.style.overflow='hidden';
-}
-
-function closeEditModal(){
-  g('edit-modal').style.display='none';
-  document.body.style.overflow='';
-}
-
-function saveEditModal(id){
-  var inv=invs.find(function(i){return i.id===id;});
-  if(!inv){alert('Nie znaleziono faktury');return;}
-  var vehs=[];
-  document.querySelectorAll('.em-veh:checked').forEach(function(cb){vehs.push(cb.value);});
-  inv.company=document.getElementById('em-co').value;
-  inv.type=document.getElementById('em-type').value;
-  inv.num=document.getElementById('em-num').value;
-  inv.date=document.getElementById('em-date').value;
-  inv.contractor=document.getElementById('em-contractor').value;
-  inv.dueDate=document.getElementById('em-due').value||null;
-  inv.brutto=parseFloat(document.getElementById('em-brutto').value)||0;
-  inv.vatRate=parseInt(document.getElementById('em-vat').value)||0;
-  inv.costCat=document.getElementById('em-cat').value||null;
-  inv.vehicles=vehs;
-  inv.description=document.getElementById('em-desc').value;
-  // Save via DELETE + POST (same id)
-  var btn=document.getElementById('em-save-btn');
-  if(btn){btn.disabled=true;btn.textContent='Zapisywanie...';}
-  fetch('/api/invoices/'+id,{method:'DELETE',headers:{'x-auth-token':tok()}})
-  .then(function(){
-    return fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)});
-  })
-  .then(function(r){
-    if(!r.ok){return r.json().then(function(e){throw new Error(e.error||'Blad serwera');});}
-    closeEditModal();
-    renderCur();
-    renderTree();
-  })
-  .catch(function(e){
-    alert('Blad zapisu: '+e.message);
-    if(btn){btn.disabled=false;btn.textContent='✓ Zapisz zmiany';}
-  });
-}
-
-// Close modal on backdrop click
-document.addEventListener('click',function(e){
-  if(e.target===g('edit-modal'))closeEditModal();
-});
-
 function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();}
 
 function renderLedger(){
@@ -587,6 +386,7 @@ function renderLedger(){
     +'<div class="metric"><div class="ml">Koszty brutto</div><div class="mv">'+fmt(all.gO)+'</div></div>'
     +'<div class="metric"><div class="ml">Wynik netto</div><div class="mv '+(all.bal>=0?'pos':'neg')+'">'+fmt(all.bal)+'</div></div>'
     +'<div class="metric"><div class="ml">VAT do zaplaty</div><div class="mv '+(all.vatDue>0?'warn':all.vatDue<0?'pos':'')+'">'+fmt(all.vatDue)+'</div></div>'
+    +(function(){var vr=calcVatRefund('all');var vrKeys=Object.keys(vr);if(!vrKeys.length)return '';var tot=vrKeys.reduce(function(a,k){return a+vr[k].amount;},0);return '<div class="metric" style="border:0.5px solid rgba(45,224,200,.3)"><div class="ml">VAT zagr. do zwrotu</div><div class="mv" style="color:var(--accent)">'+fmt(tot)+'</div></div>';})()
     +'<div class="metric" style="border:0.5px solid rgba(96,200,144,.3)"><div class="ml">Koszty oplacone</div><div class="mv pos">'+fmt(all.pO)+'</div></div>'
     +'<div class="metric" style="border:0.5px solid rgba(240,176,96,.3)"><div class="ml">Do oplacenia</div><div class="mv warn">'+fmt(all.uO)+'</div></div>'
     +'</div>';
@@ -660,15 +460,37 @@ function buildTable(rows,title,color,isCosts){
       +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||i.description||'-').slice(0,40)+nbp+'</div>'
       +'</td>';
     h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
-    h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
+    h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%'+(i.vatCountry&&i.vatCountry!=='PL'?' <span style="font-size:10px;color:var(--accent);font-weight:700">'+i.vatCountry+'</span>':'')+'</td>';
     h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
     h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id="'+i.id+'" data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-    h+='<td style="display:flex;gap:4px"><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" data-id="'+i.id+'" onclick="openEditModal(this.dataset.id)" title="Edytuj">&#9998;</button><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td><button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
     h+='<td>'+noteCell+'</td>';
     h+='</tr>';
   });
   h+='</tbody></table></div></div>';
   return h;
+}
+
+function calcVatRefund(coId){
+  var prefix=selYear+(selMonth?'-'+selMonth:'');
+  var fi=invs.filter(function(i){
+    return i.type==='buy'&&i.costCat==='fuel'
+      &&i.vatCountry&&i.vatCountry!=='PL'
+      &&i.vatAmount&&i.vatAmount>0
+      &&(coId==='all'||i.company===coId)
+      &&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
+  });
+  // Grupuj per kraj
+  var byCountry={};
+  fi.forEach(function(i){
+    var cc=i.vatCountry;
+    if(!byCountry[cc])byCountry[cc]={country:cc,amount:0,currency:'PLN',invs:[]};
+    // vatAmount jest w walucie faktury - przelicz na PLN
+    var amtPLN=i.vatAmount*(i.nbpRate||1);
+    byCountry[cc].amount+=Math.round(amtPLN*100)/100;
+    byCountry[cc].invs.push(i);
+  });
+  return byCountry;
 }
 
 function renderFirms(){
@@ -700,74 +522,37 @@ function renderFirms(){
       h+='<div class="vr"><span style="opacity:.6">VAT naliczony (zakupy)</span><span style="color:var(--green)">- '+fmt(s.vO)+'</span></div>';
       h+='<div class="vr"><span>VAT do zaplaty (JPK)</span><span style="color:'+(s.vatDue>0?'var(--amber)':s.vatDue<0?'var(--green)':'inherit')+'">'+fmt(s.vatDue)+'</span></div>';
       h+='</div>';
-      var fiAll=invs.filter(function(i){return i.company===c.id&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
-      if(fiAll.length){
-        // Filter bar
-        var activeCat=selFirmCat[c.id]||'all';
-        var btnBase='padding:4px 10px;border-radius:6px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;font-family:var(--font);transition:all .15s;white-space:nowrap';
-        var btnOn='padding:4px 10px;border-radius:6px;border:0.5px solid var(--accent);background:rgba(45,224,200,.12);color:var(--accent);cursor:pointer;font-size:11px;font-family:var(--font);font-weight:600;white-space:nowrap';
-        h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
-        h+='<span style="font-size:11px;color:var(--muted);margin-right:2px">Filtr:</span>';
-        var cid=c.id;
-        h+='<button style="'+(activeCat==='all'?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="all" onclick="setFirmCat(this)">Wszystkie ('+fiAll.length+')</button>';
-        h+='<button style="'+(activeCat==='sale'?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="sale" onclick="setFirmCat(this)">Przychody</button>';
-        h+='<button style="'+(activeCat==='buy'?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="buy" onclick="setFirmCat(this)">Koszty</button>';
-        COST_CATS.forEach(function(cat){
-          var cnt=fiAll.filter(function(i){return i.type==='buy'&&i.costCat===cat.id;}).length;
-          if(cnt>0){
-            h+='<button style="'+(activeCat===cat.id?btnOn:btnBase)+'" data-co="'+cid+'" data-cat="'+cat.id+'" onclick="setFirmCat(this)">'+cat.icon+' '+cat.label+' ('+cnt+')</button>';
-          }
+      // VAT zagraniczny do zwrotu
+      var vr=calcVatRefund(c.id);
+      var vrKeys=Object.keys(vr);
+      if(vrKeys.length>0){
+        var vrTotal=vrKeys.reduce(function(a,k){return a+vr[k].amount;},0);
+        h+='<div style="margin-bottom:14px;border:0.5px solid rgba(45,224,200,.25);border-radius:8px;padding:10px 14px">';
+        h+='<div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px">&#128178; VAT ZAGRANICZNY DO ZWROTU</div>';
+        vrKeys.forEach(function(k){
+          var countryNames={DE:'Niemcy (19%)',GB:'UK (20%)',FR:'Francja (20%)',BE:'Belgia (21%)',NL:'Holandia (21%)',IE:'Irlandia (23%)'};
+          h+='<div class="vr"><span style="opacity:.7">'+(countryNames[k]||k)+' ('+vr[k].invs.length+' faktur)</span><span style="color:var(--accent)">'+fmt(vr[k].amount)+'</span></div>';
         });
+        h+='<div class="vr" style="border-top:0.5px solid rgba(45,224,200,.2);margin-top:6px;padding-top:6px"><span style="font-weight:700">RAZEM do odzyskania</span><span style="color:var(--accent);font-weight:700">'+fmt(vrTotal)+'</span></div>';
         h+='</div>';
-        // Apply filter
-        var fi=fiAll.filter(function(i){
-          if(activeCat==='all') return true;
-          if(activeCat==='sale') return i.type==='sale';
-          if(activeCat==='buy') return i.type==='buy';
-          return i.type==='buy'&&i.costCat===activeCat;
+      }
+      var fi=invs.filter(function(i){return i.company===c.id&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+      if(fi.length){
+        h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
+        fi.forEach(function(i){
+          h+='<tr><td>'+(i.date||'-')+'</td>';
+          h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
+          h+='<td style="font-family:var(--font);max-width:220px">'
+            +(i.num?'<div style="font-weight:600;color:var(--text);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
+            +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||'-').slice(0,38)+'</div>'
+            +'</td>';
+          h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
+          h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%'+(i.vatCountry&&i.vatCountry!=='PL'?' <span style="font-size:10px;color:var(--accent);font-weight:700">'+i.vatCountry+'</span>':'')+'</td>';
+          h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
+          h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
+          h+='</tr>';
         });
-        if(fi.length){
-          // Summary bar for active filter
-          if(activeCat!=='all'){
-            var sumNetto=fi.reduce(function(a,i){return a+calcN(i.brutto,i.vatRate);},0);
-            var sumVat=fi.reduce(function(a,i){return a+calcV(i.brutto,i.vatRate);},0);
-            var sumBrutto=fi.reduce(function(a,i){return a+i.brutto;},0);
-            var sumPaid=fi.filter(function(i){return i.paid;}).reduce(function(a,i){return a+i.brutto;},0);
-            var sumUnpaid=fi.filter(function(i){return !i.paid;}).reduce(function(a,i){return a+i.brutto;},0);
-            var activeCatObj=COST_CATS.find(function(cc){return cc.id===activeCat;})||{icon:'',label:activeCat};
-            var catLabel=activeCat==='sale'?'📈 Przychody':activeCat==='buy'?'💸 Koszty':(activeCatObj.icon+' '+activeCatObj.label);
-            h+='<div style="background:rgba(45,224,200,.06);border:0.5px solid rgba(45,224,200,.2);border-radius:10px;padding:12px 16px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:16px;align-items:center">';
-            h+='<span style="font-size:12px;font-weight:700;color:var(--accent)">'+catLabel+' — '+fi.length+' faktur</span>';
-            h+='<span style="font-size:12px;color:var(--muted)">Netto: <b style="color:var(--text)">'+fmt(sumNetto)+'</b></span>';
-            h+='<span style="font-size:12px;color:var(--muted)">VAT: <b style="color:var(--text)">'+fmt(sumVat)+'</b></span>';
-            h+='<span style="font-size:12px;color:var(--muted)">Brutto: <b style="color:var(--accent);font-size:14px">'+fmt(sumBrutto)+'</b></span>';
-            if(activeCat==='buy'||COST_CATS.find(function(cc){return cc.id===activeCat;})){
-              h+='<span style="font-size:11px;color:var(--green)">✓ Oplacone: '+fmt(sumPaid)+'</span>';
-              if(sumUnpaid>0) h+='<span style="font-size:11px;color:var(--amber)">⏳ Do oplacenia: '+fmt(sumUnpaid)+'</span>';
-            }
-            h+='</div>';
-          }
-          h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th></tr></thead><tbody>';
-          fi.forEach(function(i){
-            h+='<tr><td>'+(i.date||'-')+'</td>';
-            h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
-            h+='<td style="font-family:var(--font);max-width:220px">'
-              +(i.num?'<div style="font-weight:600;color:var(--text);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
-              +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||'-').slice(0,38)+'</div>'
-              +'</td>';
-            var _cat=COST_CATS.find(function(cc){return cc.id===i.costCat;});
-            h+='<td style="white-space:nowrap;font-size:12px">'+(_cat?_cat.icon+' <span style="opacity:.7">'+_cat.label+'</span>':'-')+'</td>';
-            h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
-            h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
-            h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
-            h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
-            h+='<td><button class="sm" style="background:rgba(45,224,200,.1);border-color:rgba(45,224,200,.3);color:var(--accent)" data-id="'+i.id+'" onclick="openEditModal(this.dataset.id)" title="Edytuj">&#9998;</button></td>';
-            h+='</tr>';
-          });
-          h+='</tbody></table></div>';
-        } else {
-          h+='<div style="font-size:12px;opacity:.4;padding:6px 0">Brak faktur dla wybranego filtru</div>';
-        }
+        h+='</tbody></table></div>';
       } else {
         h+='<div style="font-size:12px;opacity:.4;padding:6px 0">Brak faktur w wybranym okresie</div>';
       }
@@ -780,14 +565,8 @@ function renderFirms(){
 
 function sdrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)sfile(f);}
 
-var pendingFileURL=null;var pendingFileMime=null;
 function sfile(file){
-  pending=null;
-  // Zapisz URL do podgladu
-  if(pendingFileURL)URL.revokeObjectURL(pendingFileURL);
-  pendingFileURL=URL.createObjectURL(file);
-  pendingFileMime=file.type||'application/pdf';
-  g('sform').innerHTML='';
+  pending=null;g('sform').innerHTML='';
   setMsg('sstatus','<span class="spin">&#8635;</span> AI czyta fakture...','info');
   b64(file).then(function(data){
     var mime=file.type||'application/pdf';
@@ -795,7 +574,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='Jestes systemem OCR faktur transportowych. Odpowiadasz WYLACZNIE surowym JSON - zero tekstu, zero komentarzy, zero markdown. Jesli nie mozesz odczytac, zwroc JSON z pustymi polami.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_w_walucie_faktury}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. ZASADY KWOT: 1) brutto i netto = LACZNIE CALA FAKTURA z pola RAZEM/TOTAL (ostatnia strona). 2) currency = waluta z pola RAZEM/TOTAL (jesli faktura ma dwie waluty PLN i EUR, wybierz te w ktorej jest glowna kwota RAZEM/TOTAL). 3) vehicle_breakdown: dla kazdego pojazdu wez kwote brutto z kolumny TEJ SAMEJ waluty co currency - zsumuj wszystkie rejsy danego pojazdu. 4) Stare->nowe tablice: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. 5) type=sale TYLKO gdy SPRZEDAWCA (seller/wystawca) to Vipremium/VT Ltd/PT&L/ET&VG - jesli Vipremium jest NABYWCA (buyer) to type=buy. TYLKO JSON.';
+    var sys='Jestes systemem OCR faktur transportowych. TYLKO JSON bez markdown.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total,"netto":liczba_total,"vat_rate":liczba,"currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_EUR_dla_tego_pojazdu}]}\nKRYTYCZNE: Przejrzyj KAZDA strone. Znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ wszystkie jej pozycje (base+BAF+ETS+Tax+inne). Jeden pojazd=wiele rejsow=jedna suma. brutto=lacznie cala faktura. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -806,20 +585,8 @@ function sfile(file){
   }).then(function(data){
     if(!data.content)throw new Error(data.error||'Brak odpowiedzi');
     var txt=data.content.map(function(x){return x.text||'';}).join('').replace(/```json|```/g,'').trim();
-    // Extract JSON object if model returned extra text
-    var jsonMatch=txt.match(/\{[\s\S]*\}/);
-    if(jsonMatch)txt=jsonMatch[0];
     var ai;
-    try{ai=JSON.parse(txt);}catch(e){
-      // Try to fix truncated JSON
-      try{
-        var fixed=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');
-        if(fixed.trim().slice(-1)!=='}')fixed+='}';
-        ai=JSON.parse(fixed);
-      }catch(e2){
-        throw new Error('Model nie zwrocil poprawnego JSON. Sprobuj ponownie lub uzyj innego pliku.');
-      }
-    }
+    try{ai=JSON.parse(txt);}catch(e){txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');if(txt.trim().slice(-1)!=='}')txt+='}';ai=JSON.parse(txt);}
     var guess=guessCompany((ai.raw_text||'')+(ai.buyer||'')+(ai.contractor||''));
     var brutto=ai.brutto||0;
     var vr=VATS.indexOf(ai.vat_rate)>=0?ai.vat_rate:23;
@@ -903,34 +670,6 @@ function sfile(file){
       ||allLow.indexOf('wydawnictwo bw')>=0||allLow.indexOf('wyd. bw')>=0
       ||allLow.indexOf('deklaracja')>=0)
       autoCat='customs';
-    // Koszty stale - leasing, ubezpieczenie, abonament, najem, czynsz, ksiegowosc
-    else if(allLow.indexOf('leasing')>=0||allLow.indexOf('leasin')>=0
-      ||allLow.indexOf('ubezpieczeni')>=0||allLow.indexOf('polisa')>=0||allLow.indexOf('allianz')>=0
-      ||allLow.indexOf('warta')>=0||allLow.indexOf('pzu')>=0||allLow.indexOf('ergo')>=0
-      ||allLow.indexOf('abonament')>=0||allLow.indexOf('subskrypcj')>=0
-      ||allLow.indexOf('najem')>=0||allLow.indexOf('czynsz')>=0||allLow.indexOf('dzierzaw')>=0
-      ||allLow.indexOf('ksiegowo')>=0||allLow.indexOf('rachunkowo')>=0
-      ||allLow.indexOf('telefoniczn')>=0||allLow.indexOf('internet')>=0
-      ||allLow.indexOf('viatoll')>=0||allLow.indexOf('e-toll')>=0||allLow.indexOf('etoll')>=0)
-      autoCat='fixed';
-    // Biuro - materialy biurowe, papier, drukarka, komputer, software, hosting
-    else if(allLow.indexOf('biuro')>=0||allLow.indexOf('papier')>=0
-      ||allLow.indexOf('drukark')>=0||allLow.indexOf('toner')>=0||allLow.indexOf('tusz')>=0
-      ||allLow.indexOf('komputer')>=0||allLow.indexOf('laptop')>=0||allLow.indexOf('monitor')>=0
-      ||allLow.indexOf('oprogramow')>=0||allLow.indexOf('software')>=0||allLow.indexOf('licencj')>=0
-      ||allLow.indexOf('hosting')>=0||allLow.indexOf('domena')>=0
-      ||allLow.indexOf('stapl')>=0||allLow.indexOf('segregat')>=0||allLow.indexOf('teczk')>=0
-      ||allLow.indexOf('office')>=0||allLow.indexOf('microsoft')>=0||allLow.indexOf('google workspace')>=0)
-      autoCat='office';
-    // Warsztat - narzedzia, czesci, akcesoria warsztatowe
-    else if(allLow.indexOf('narzedzi')>=0||allLow.indexOf('klucz')>=0
-      ||allLow.indexOf('wiertark')>=0||allLow.indexOf('szlifierk')>=0||allLow.indexOf('spawark')>=0
-      ||allLow.indexOf('lewarek')>=0||allLow.indexOf('podnos')>=0
-      ||allLow.indexOf('smarownic')>=0||allLow.indexOf('kompresor')>=0
-      ||allLow.indexOf('warsztat')>=0||allLow.indexOf('worksh')>=0
-      ||allLow.indexOf('filtr')>=0||allLow.indexOf('olej silnik')>=0
-      ||allLow.indexOf('hamulc')>=0||allLow.indexOf('klocki')>=0)
-      autoCat='workshop';
     pending={id:uid(),company:guess||'vt',guessed:!!guess,type:ai.type==='sale'?'sale':'buy',
       num:ai.num||'',date:ai.date||today(),contractor:ai.contractor||'',buyer:ai.buyer||'',
       description:ai.description||'',brutto:brutto,vatRate:vr,currency:ai.currency||'PLN',
@@ -968,30 +707,7 @@ function guessCompany(txt){
   return null;
 }
 function renderSForm(){
-  if(!pending){
-    var sp=g('scan-split');if(sp){sp.style.display='none';}
-    var sf=g('sform');if(sf)sf.innerHTML='';
-    var sp2=g('sprev');if(sp2)sp2.innerHTML='';
-    return;
-  }
-  // Aktywuj split layout
-  var splitEl=g('scan-split');
-  if(splitEl){
-    splitEl.style.cssText='display:flex;gap:20px;align-items:flex-start;flex-direction:row';
-    var dz=g('sdropzone');
-    if(dz)dz.style.display='none';
-  }
-  // Podglad faktury
-  var prevEl=g('sprev');
-  if(prevEl&&pendingFileURL){
-    if(pendingFileMime==='application/pdf'){
-      prevEl.innerHTML='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Podglad faktury</div>'
-        +'<iframe src="'+pendingFileURL+'" style="width:100%;height:80vh;border:0.5px solid var(--border);border-radius:10px;background:#fff" title="Podglad faktury"></iframe>';
-    } else {
-      prevEl.innerHTML='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Podglad faktury</div>'
-        +'<img src="'+pendingFileURL+'" style="width:100%;border:0.5px solid var(--border);border-radius:10px;object-fit:contain;max-height:80vh" alt="Podglad faktury">';
-    }
-  }
+  if(!pending){g('sform').innerHTML='';return;}
   var n=calcN(pending.brutto,pending.vatRate),v=calcV(pending.brutto,pending.vatRate);
   var isEUR=pending.currency!=='PLN';
   var nbp='';
@@ -1094,8 +810,7 @@ function toggleVehDropdown(){
 function toggleAllVehicles(){
   var allChk=document.getElementById('veh-all');
   if(!allChk)return;
-  // checkbox state is already toggled by the label click before this fires
-  var shouldCheck=allChk.checked;
+  var shouldCheck=!allChk.checked;
   if(shouldCheck){
     pending.vehicles=FLEET.slice();
   } else {
@@ -1114,9 +829,7 @@ function toggleVehicle(v,checked){
   if(checked){if(pending.vehicles.indexOf(v)<0)pending.vehicles.push(v);}
   else{pending.vehicles=pending.vehicles.filter(function(x){return x!==v;});}
 }
-function setFirmCat(btn){selFirmCat[btn.dataset.co]=btn.dataset.cat;renderFirms();}
-
-function cancelScan(){pending=null;if(pendingFileURL){URL.revokeObjectURL(pendingFileURL);pendingFileURL=null;}var sp=g('scan-split');if(sp)sp.style.display='none';var dz=g('sdropzone');if(dz)dz.style.display='';renderSForm();setMsg('sstatus','','');}
+function cancelScan(){pending=null;renderSForm();setMsg('sstatus','','');}
 function manualRate(val){var r=parseFloat(val)||0;pending.nbpRate=r;pending.brutto=r>0?Math.round((pending.bruttoOrig||pending.brutto)*r*100)/100:0;refreshComp();}
 function refreshComp(){
   var el2=g('scomp');if(!el2||!pending)return;
@@ -1126,7 +839,7 @@ function refreshComp(){
   var pb=g('pbrutto');if(pb)pb.value=pending.brutto.toFixed(2);
 }
 function saveInv(){
-  if(!pending||pending.brutto===null||pending.brutto===undefined||pending.brutto===0){alert('Podaj kwote brutto!');return;}
+  if(!pending||!pending.brutto||pending.brutto<=0){alert('Podaj kwote brutto!');return;}
 
   // Sprawdz duplikat po numerze faktury + firma
   if(pending.num && pending.num.trim() !== ''){
@@ -1148,12 +861,7 @@ function saveInv(){
   .then(function(r){
     if(!r.ok){return r.json().then(function(e){throw new Error(e.error||'Blad serwera');});}
     if(!invs.find(function(x){return x.id===inv.id;}))invs.push(inv);
-    pending=null;
-    if(pendingFileURL){URL.revokeObjectURL(pendingFileURL);pendingFileURL=null;}
-    var sp=g('scan-split');if(sp)sp.style.display='none';
-    var dz=g('sdropzone');if(dz)dz.style.display='';
-    var sfi=g('sfi');if(sfi)sfi.value='';
-    renderSForm();setMsg('sstatus','Faktura zaksiegowana! Mozesz wrzucic kolejna.','ok');renderTree();
+    pending=null;renderSForm();setMsg('sstatus','Faktura zaksiegowana!','ok');renderTree();
   })
   .catch(function(e){setMsg('sstatus','Blad: '+e.message,'err');});
 }
@@ -1824,14 +1532,11 @@ function renderVehicles(){
 
   // Categories to show per vehicle (customs = shared, shown as one column)
   var COLS=[
-    {id:'fuel',     label:'Tankowanie',       icon:'⛽'},
-    {id:'ferry',    label:'Promy',            icon:'🚢'},
-    {id:'service',  label:'Serwis',           icon:'🔧'},
-    {id:'toll',     label:'Autostrady',       icon:'🛣️'},
-    {id:'fixed',    label:'Koszty stale',     icon:'🏢'},
-    {id:'office',   label:'Biuro',            icon:'🖥️'},
-    {id:'workshop', label:'Warsztat',          icon:'🔩'},
-    {id:'other',    label:'Koszty dodatkowe', icon:'📦'}
+    {id:'fuel',   label:'Tankowanie', icon:'⛽'},
+    {id:'ferry',  label:'Promy',      icon:'🚢'},
+    {id:'service',label:'Serwis',     icon:'🔧'},
+    {id:'toll',   label:'Autostrady', icon:'🛣️'},
+    {id:'other',  label:'Inne',       icon:'📦'}
   ];
   // Customs split equally across all vehicles
   var customsTotal=buyInvs.filter(function(i){return i.costCat==='customs';})
@@ -1932,15 +1637,5 @@ window.onload=function(){
   }
 };
 </script>
-
-<div id="edit-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);overflow-y:auto">
-  <div style="margin:40px auto;max-width:600px;background:var(--bg2);border:0.5px solid var(--border);border-radius:16px;padding:28px 28px 24px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <div style="font-size:16px;font-weight:700">&#9998; Edytuj fakture</div>
-      <button onclick="closeEditModal()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1">&times;</button>
-    </div>
-    <div id="edit-modal-body"></div>
-  </div>
-</div>
 </body>
 </html>

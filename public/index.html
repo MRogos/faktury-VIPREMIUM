@@ -177,7 +177,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <p>PDF / JPG / PNG &#8212; drag &amp; drop lub kliknij</p>
       </div>
       <input type="file" id="sfi" accept=".pdf,.jpg,.jpeg,.png,image/*" onchange="sfile(this.files[0])">
-      <div id="sform"></div>
+      <div style="display:flex;gap:16px;align-items:flex-start">
+        <div id="sform" style="flex:1;min-width:0"></div>
+        <div id="sprev" style="width:180px;flex-shrink:0;display:none;position:sticky;top:20px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Podglad</div>
+          <div id="sprev-pages"></div>
+        </div>
+      </div>
     </div>
     <div id="page-import" style="display:none">
       <h1>Import XLSX / PDF</h1>
@@ -567,6 +573,20 @@ function sdrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)sfile(f)
 
 function sfile(file){
   pending=null;g('sform').innerHTML='';
+  g('sprev').style.display='none';g('sprev-pages').innerHTML='';
+  var _objUrl=URL.createObjectURL(file);
+  if(file.type==='application/pdf'){
+    var _emb=document.createElement('embed');
+    _emb.src=_objUrl;_emb.type='application/pdf';
+    _emb.style.cssText='width:180px;height:260px;border-radius:6px;border:0.5px solid var(--border);display:block;margin-bottom:8px';
+    g('sprev-pages').appendChild(_emb);
+    g('sprev').style.display='block';
+  } else if(file.type.indexOf('image')===0){
+    var _pi=document.createElement('img');
+    _pi.src=_objUrl;_pi.style.cssText='width:180px;border-radius:6px;border:0.5px solid var(--border)';
+    g('sprev-pages').appendChild(_pi);
+    g('sprev').style.display='block';
+  }
   setMsg('sstatus','<span class="spin">&#8635;</span> AI czyta fakture...','info');
   b64(file).then(function(data){
     var mime=file.type||'application/pdf';

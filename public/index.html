@@ -226,6 +226,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div id="page-vehicles" style="display:none">
       <h1>Koszty per auto</h1>
       <p class="sub" id="vsub"></p>
+      <div id="vfilters" style="margin-bottom:16px"></div>
       <div id="vcontent"></div>
     </div>
     <div id="page-firms" style="display:none">
@@ -1595,6 +1596,20 @@ function exportCSV(){
 
 function renderVehicles(){
   g('vsub').textContent=periodLabel()+' • '+FLEET.length+' pojazdow';
+  // Selektor miesiecy
+  if(g('vfilters')){
+    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+    mh+='<span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+    mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderVehicles()">Caly rok</button>';
+    MONTHS.forEach(function(m,idx){
+      var pfx=selYear+'-'+m;
+      var has=invs.some(function(i){return i.type==='buy'&&i.date&&i.date.indexOf(pfx)===0;});
+      if(!has)return;
+      mh+='<button class="sm '+(selMonth===m?'on':'')+'" onclick="selMonth=\''+m+'\';renderVehicles()">'+MN[idx]+'</button>';
+    });
+    mh+='</div>';
+    g('vfilters').innerHTML=mh;
+  }
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var buyInvs=invs.filter(function(i){
     return i.type==='buy'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));

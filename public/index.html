@@ -851,7 +851,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total_brutto,"netto":liczba_total_netto,"vat_rate":liczba,"vat_amount":kwota_VAT,"vat_country":"kod_kraju","currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_brutto}]}\nKRYTYCZNE: vat_country=kraj wystawcy (DE/GB/FR/BE/NL/PL). vat_amount=kwota VAT z faktury. vehicle_breakdown: przejrzyj KAZDA strone, znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich pozycji. type=sale tylko Vipremium/VT/PT&L/ET&VG. TYLKO JSON.';
+    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total_brutto,"netto":liczba_total_netto,"vat_rate":liczba,"vat_amount":kwota_VAT,"vat_country":"kod_kraju","currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_brutto}]}\nKRYTYCZNE: vat_country=kraj wystawcy (DE/GB/FR/BE/NL/PL). vat_amount=kwota VAT z faktury. vehicle_breakdown: przejrzyj KAZDA strone, znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich pozycji. type=sale tylko Vipremium/VT/PT&L/ET&VG. KLUCZOWE: jesli faktura ma stawke n/p, nie podlega, odwrotne obciazenie lub reverse charge -> vat_rate=0 i vat_amount=0. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -874,10 +874,20 @@ function sfile(file){
     // Sprawdz czy faktura ma VAT n/p (nie podlega) lub odwrotne obciazenie
     var _rawVatRate=ai.vat_rate;
     var _rawText=(ai.raw_text||'').toLowerCase();
-    var _isNP=_rawText.indexOf('n/p')>=0||_rawText.indexOf('nie podlega')>=0
-      ||_rawText.indexOf('odwrotne obci')>=0||_rawText.indexOf('reverse charge')>=0
-      ||_rawText.indexOf('art. 28')>=0||_rawText.indexOf('0.00 eur')>=0&&_rawText.indexOf('vat')>=0;
-    if(_isNP||_rawVatRate===0||String(_rawVatRate).indexOf('n')>=0) _rawVatRate=0;
+    // n/p w raw_text lub description lub gdy AI zwrocil 0 VAT
+    var _isNP=_rawText.indexOf('n/p')>=0
+      ||_rawText.indexOf('nie podlega')>=0
+      ||_rawText.indexOf('odwrotne obci')>=0
+      ||_rawText.indexOf('reverse charge')>=0
+      ||_rawText.indexOf('art. 28')>=0
+      ||(ai.description||'').toLowerCase().indexOf('n/p')>=0
+      ||_rawVatRate===0
+      ||String(_rawVatRate).toLowerCase().indexOf('n')>=0
+      // Jesli AI podal vat_amount=0 i jest waluta obca -> eksport uslug, VAT=0
+      ||(parseFloat(ai.vat_amount)===0&&ai.currency&&ai.currency!=='PLN')
+      // Jesli netto==brutto (brak VAT)
+      ||(ai.netto>0&&ai.brutto>0&&Math.abs(ai.netto-ai.brutto)<0.01);
+    if(_isNP) _rawVatRate=0;
     var _vatByCountry={GB:20,UK:20,DE:19,FR:20,BE:21,NL:21,IE:23,PL:23};
     var _aiCountry=(ai.vat_country||'').toUpperCase();
     if(!_aiCountry){var _vn=(ai.contractor||'')+' '+(ai.raw_text||'');
@@ -890,9 +900,9 @@ function sfile(file){
     else if(_con.indexOf('staack')>=0||_con.indexOf('tankpool')>=0)_aiCountry='DE';
     else if(_con.indexOf('as24')>=0||_con.indexOf('tfc')>=0)_aiCountry='FR';
     if(_aiCountry&&!ai.vat_country)ai.vat_country=_aiCountry;
-    var _forcedRate=_vatByCountry[_aiCountry];
-    // Jesli n/p - zawsze 0, nie nadpisuj
-    var vr=_isNP?0:(_forcedRate||(VATS.indexOf(_rawVatRate)>=0?_rawVatRate:23));
+    var _forcedRate=_isNP?null:_vatByCountry[_aiCountry];
+    // Jesli n/p - zawsze 0, nie nadpisuj zadnym krajem
+    var vr=_isNP?0:(_forcedRate||(VATS.indexOf(_rawVatRate)>=0?_rawVatRate:(_rawVatRate===0?0:23)));
     // Auto-detect cost category and vehicles from contractor/description
     var autoVehicles=[];
     var rawText=(ai.raw_text||'')+(ai.description||'')+(ai.contractor||'');

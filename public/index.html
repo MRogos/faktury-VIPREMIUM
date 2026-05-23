@@ -1166,8 +1166,9 @@ function toggleVehDropdown(){
 function toggleAllVehicles(){
   var allChk=document.getElementById('veh-all');
   if(!allChk)return;
-  var shouldCheck=!allChk.checked;
-  if(shouldCheck){
+  // allChk.checked jest juz zaktualizowany przez browser przed wywolaniem onclick
+  // wiec jesli checked=true to wlasnie zaznaczylismy
+  if(allChk.checked){
     pending.vehicles=FLEET.slice();
   } else {
     pending.vehicles=[];

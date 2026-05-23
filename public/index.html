@@ -974,6 +974,7 @@ function sfile(file){
     var _fixedKey=Object.keys(FIXED_SUPPLIERS).find(function(k){return allLow.indexOf(k)>=0;});
     var _isInsurance=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
     var _isOffice=allLow.indexOf('biuro')>=0||allLow.indexOf('artykul')>=0||allLow.indexOf('papier')>=0||allLow.indexOf('toner')>=0||allLow.indexOf('druk')>=0;
+    var autoCat='other';
     // Promy - Move Expert, DFDS, Stena, trasy promowe
     if(allLow.indexOf('move expert')>=0||allLow.indexOf('moveexpert')>=0
       ||allLow.indexOf('dfds')>=0||allLow.indexOf('stena')>=0

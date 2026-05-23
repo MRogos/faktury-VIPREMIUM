@@ -580,6 +580,10 @@ function buildTable(rows,title,color,isCosts){
     h+='<td style="text-align:center">'+(i.attachmentUrl?'<button class="sm" onclick="openAttachment(\''+i.id+'\')">&#128206;</button>':'<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAttachment(\''+i.id+'\',this)"><span style="color:var(--muted)">&#128190;</span></label>')+'</td>';
     h+='<td>'+noteCell+'</td>';
     h+='</tr>';
+    h+='<tr id="prev-row-'+i.id+'" style="display:none"><td colspan="12" style="padding:0">';
+    h+='<div style="padding:12px;background:var(--bg2);border-bottom:0.5px solid var(--border)">';
+    h+='<iframe id="prev-frame-'+i.id+'" src="" style="width:100%;height:700px;border-radius:6px;border:0.5px solid var(--border);background:white"></iframe>';
+    h+='</div></td></tr>';
   });
   h+='</tbody></table></div></div>';
   return h;
@@ -1648,21 +1652,23 @@ function uploadAttachment(id,input){
     else alert('Blad uploadu: '+(d.error||'nieznany'));
   }).catch(function(e){alert('Blad: '+e.message);});
 }
-function openAttachment(id){
+function openAttachment(id){toggleAttachPreview(id);}
+function toggleAttachPreview(id){
+  var row=document.getElementById('prev-row-'+id);
+  var frame=document.getElementById('prev-frame-'+id);
+  if(!row)return;
+  if(row.style.display!=='none'){row.style.display='none';if(frame)frame.src='';return;}
+  document.querySelectorAll('tr[id^="prev-row-"]').forEach(function(r){
+    r.style.display='none';
+    var f=document.getElementById('prev-frame-'+r.id.slice(9));
+    if(f)f.src='';
+  });
   fetch('/api/invoices/'+id+'/attachment',{headers:{'x-auth-token':tok()}})
   .then(function(r){return r.json();}).then(function(d){
     if(!d.url){alert('Brak zalacznika');return;}
-    var prev=document.getElementById('lprev');
-    var frame=document.getElementById('lprev-frame');
-    var dl=document.getElementById('lprev-dl');
-    if(prev&&frame){
-      frame.src=d.url;
-      if(dl)dl.href=d.url;
-      prev.style.display='block';
-      prev.scrollIntoView({behavior:'smooth',block:'start'});
-    }
-  })
-  .catch(function(e){alert('Blad: '+e.message);});
+    row.style.display='';frame.src=d.url;
+    row.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }).catch(function(e){alert('Blad: '+e.message);});
 }
 function deleteAttachment(id){
   if(!confirm('Usunac zalacznik?'))return;

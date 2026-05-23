@@ -525,7 +525,7 @@ function buildTable(rows,title,color,isCosts){
   h+='</div>';
   h+='<div class="tw"><table><thead><tr>';
   h+='<th style="width:32px;text-align:center"><input class="chk" type="checkbox" '+(allSel?'checked':'')+' onchange="selAll(this.checked,'+varName+')" title="Zaznacz wszystkie"></th>';
-  h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th style="text-align:center;width:28px"></th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th></th><th>Notatka</th>';
+  h+='<th>Data</th><th style="text-align:center">Termin</th><th>Firma</th><th style="text-align:center;width:28px"></th><th>Nr / Kontrahent</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th><th style="text-align:center">Zał.</th><th></th><th>Notatka</th>';
   h+='</tr></thead><tbody>';
   function makeDueCell(inv){
     var days=999;
@@ -570,6 +570,7 @@ function buildTable(rows,title,color,isCosts){
     h+='<td style="white-space:nowrap">';
     if(userRole==='owner'){h+='<button class="sm" style="margin-right:3px" data-id="'+i.id+'" data-action="edit" onclick="onBtnClick(event)">&#9998;</button>';}
     h+='<button class="sm del" data-id="'+i.id+'" data-action="del" onclick="onBtnClick(event)">&#10005;</button></td>';
+    h+='<td style="text-align:center">'+(i.attachmentUrl?'<button class="sm" onclick="openAttachment(\''+i.id+'\')">&#128206;</button>':'<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAttachment(\''+i.id+'\',this)"><span style="color:var(--muted)">&#128190;</span></label>')+'</td>';
     h+='<td>'+noteCell+'</td>';
     h+='</tr>';
   });
@@ -1619,6 +1620,25 @@ function onChkChange(e){
   var action=el.getAttribute('data-action');
   if(action==='sel') toggleSel(id,el.checked);
   else if(action==='paid') togglePaid(id,el.checked);
+}
+function uploadAttachment(id,input){
+  var file=input.files[0];if(!file)return;
+  var fd=new FormData();fd.append('file',file);
+  fetch('/api/invoices/'+id+'/attachment',{method:'POST',headers:{'x-auth-token':tok()},body:fd})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.ok){var inv=invs.find(function(x){return x.id===id;});if(inv)inv.attachmentUrl=d.key;renderLedger();}
+    else alert('Blad uploadu: '+(d.error||'nieznany'));
+  }).catch(function(e){alert('Blad: '+e.message);});
+}
+function openAttachment(id){
+  fetch('/api/invoices/'+id+'/attachment',{headers:{'x-auth-token':tok()}})
+  .then(function(r){return r.json();}).then(function(d){if(d.url)window.open(d.url,'_blank');else alert('Brak zalacznika');})
+  .catch(function(e){alert('Blad: '+e.message);});
+}
+function deleteAttachment(id){
+  if(!confirm('Usunac zalacznik?'))return;
+  fetch('/api/invoices/'+id+'/attachment',{method:'DELETE',headers:{'x-auth-token':tok()}})
+  .then(function(){var inv=invs.find(function(x){return x.id===id;});if(inv)inv.attachmentUrl=null;renderLedger();});
 }
 function onBtnClick(e){
   var el=e.currentTarget||e.target;

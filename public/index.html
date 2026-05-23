@@ -289,6 +289,22 @@ var FIXED_SUPPLIERS={
   'efl ':{label:'EFL',split:'all'},'gap':{label:'GAP',split:'plate'}
 };
 var INSURANCE_KEYWORDS=['ubezpiecz','polisa','oc zawod','oc przewo',' ac ',' nnw '];
+// Własne firmy - faktury między nimi to koszty wewnętrzne, nie wchodza do tabelek
+var OWN_COMPANIES=[
+  'vipremium marcin rogowski',
+  'vipremium transport',
+  'vipremium transport ltd',
+  'premium transport & logistics',
+  'premium transport and logistics',
+  'elite tax & van group',
+  'elite tax and van group',
+  'elitetax',
+  'elite van'
+];
+function isInternalInv(inv){
+  var con=(inv.contractor||'').toLowerCase();
+  return OWN_COMPANIES.some(function(n){return con.indexOf(n)>=0;});
+}
 var FLEET=['DW7MP83','DW6RS03','DWLTA36','WPR8462U','WGM9808M','DSWTF32','DSR80719','DSR80682','DSR80874'];
 var PLATE_ALIASES={'DW1VT08':'DSR80719','DW1WN03':'DSR80874','DW5VX38':'DSR80682'};
 function normalizePlate(plate){var p=(plate||'').toUpperCase().replace(/\s/g,'');return PLATE_ALIASES[p]||p;}
@@ -578,7 +594,9 @@ function renderFixed(){
     g('fixfilters').innerHTML=mh;
   }
   var fixInvs=invs.filter(function(i){
-    return i.costCat==='fixed'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
+    return i.costCat==='fixed'
+      &&(!selYear||(i.date&&i.date.indexOf(prefix)===0))
+      &&!isInternalInv(i);
   }).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
 
   var h='';
@@ -688,7 +706,9 @@ function renderOffice(){
     g('offfilters').innerHTML=mh;
   }
   var offInvs=invs.filter(function(i){
-    return i.costCat==='office'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
+    return i.costCat==='office'
+      &&(!selYear||(i.date&&i.date.indexOf(prefix)===0))
+      &&!isInternalInv(i);
   }).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
 
   if(!offInvs.length){g('offcontent').innerHTML='<div class="empty">Brak kosztow biurowych w wybranym okresie</div>';return;}
@@ -1918,7 +1938,9 @@ function renderVehicles(){
   }
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var buyInvs=invs.filter(function(i){
-    return i.type==='buy'&&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
+    return i.type==='buy'
+      &&(!selYear||(i.date&&i.date.indexOf(prefix)===0))
+      &&!isInternalInv(i);
   });
   var VCOLS=[
     {id:'fuel',   label:'Tankowanie', icon:'⛽'},

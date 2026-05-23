@@ -884,7 +884,7 @@ function sfile(file){
       ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:data}}
       :{type:'image',source:{type:'base64',media_type:mime,data:data}};
     var _fl=FLEET.join(',');
-    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total_brutto,"netto":liczba_total_netto,"vat_rate":liczba,"vat_amount":kwota_VAT,"vat_country":"kod_kraju","currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_brutto}]}\nKRYTYCZNE: vat_country=kraj wystawcy (DE/GB/FR/BE/NL/PL). vat_amount=kwota VAT z faktury. vehicle_breakdown: przejrzyj KAZDA strone, znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich pozycji. type=sale tylko Vipremium/VT/PT&L/ET&VG. KLUCZOWE: vat_rate=DOKLADNA stawka z faktury (moze byc 0,5,8,19,20,21,23 lub inna) - NIGDY nie zakladaj 23% domyslnie, czytaj z dokumentu. Jesli n/p/nie podlega/reverse charge -> vat_rate=0 i vat_amount=0. TYLKO JSON.';
+    var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total_brutto,"netto":liczba_total_netto,"vat_rate":liczba,"vat_amount":kwota_VAT,"vat_country":"kod_kraju","currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_brutto}]}\nKRYTYCZNE: vat_country=kraj wystawcy (DE/GB/FR/BE/NL/PL). vat_amount=kwota VAT z faktury. vehicle_breakdown: przejrzyj KAZDA strone, znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich pozycji. type=sale tylko Vipremium/VT/PT&L/ET&VG. KLUCZOWE: vat_rate=DOMINUJACA stawka VAT. vat_amount=DOKLADNA LACZNA kwota VAT z podsumowania faktury (przepisz z dokumentu; dla wielu stawek - suma wszystkich kwot VAT). netto=kwota bez VAT. Jesli n/p/nie podlega/reverse charge -> vat_rate=0 i vat_amount=0. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
       model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
@@ -1060,7 +1060,10 @@ function guessCompany(txt){
 }
 function renderSForm(){
   if(!pending){g('sform').innerHTML='';return;}
-  var n=calcN(pending.brutto,pending.vatRate),v=calcV(pending.brutto,pending.vatRate);
+  var v,n;
+  if(pending.vatAmount&&pending.vatAmount>0&&Math.abs(pending.vatAmount-calcV(pending.brutto,pending.vatRate))>1){
+    v=Math.round(pending.vatAmount*(pending.nbpRate||1)*100)/100;n=Math.round((pending.brutto-v)*100)/100;
+  } else {v=calcV(pending.brutto,pending.vatRate);n=calcN(pending.brutto,pending.vatRate);}
   var isEUR=pending.currency!=='PLN';
   var nbp='';
   var isForeignFuel = isForeignVatInv(pending);

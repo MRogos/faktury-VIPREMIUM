@@ -854,6 +854,7 @@ function sdrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f)sfile(f)
 
 function sfile(file){
   pending=null;g('sform').innerHTML='';
+  window._scanFile=file;
   g('sprev').style.display='none';g('sprev-pages').innerHTML='';
   var _ou=URL.createObjectURL(file);
   if(file.type==='application/pdf'){
@@ -1200,6 +1201,16 @@ function saveInv(){
   .then(function(r){
     if(!r.ok){return r.json().then(function(e){throw new Error(e.error||'Blad serwera');});}
     if(!invs.find(function(x){return x.id===inv.id;}))invs.push(inv);
+    // Auto-upload scanned file as attachment
+    if(window._scanFile){
+      var _sf=window._scanFile;window._scanFile=null;
+      var fd=new FormData();fd.append('file',_sf);
+      fetch('/api/invoices/'+inv.id+'/attachment',{method:'POST',headers:{'x-auth-token':tok()},body:fd})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d.ok){inv.attachmentUrl=d.key;var existing=invs.find(function(x){return x.id===inv.id;});if(existing)existing.attachmentUrl=d.key;}
+        loadInvs();
+      }).catch(function(){loadInvs();});
+    } else {loadInvs();}
     pending=null;renderSForm();setMsg('sstatus','Faktura zaksiegowana!','ok');renderTree();
   })
   .catch(function(e){setMsg('sstatus','Blad: '+e.message,'err');});
@@ -1632,7 +1643,20 @@ function uploadAttachment(id,input){
 }
 function openAttachment(id){
   fetch('/api/invoices/'+id+'/attachment',{headers:{'x-auth-token':tok()}})
-  .then(function(r){return r.json();}).then(function(d){if(d.url)window.open(d.url,'_blank');else alert('Brak zalacznika');})
+  .then(function(r){return r.json();}).then(function(d){
+    if(!d.url){alert('Brak zalacznika');return;}
+    // Pokaz modal z podgladem inline
+    var m=document.getElementById('attach-modal');
+    if(!m){m=document.createElement('div');m.id='attach-modal';document.body.appendChild(m);}
+    m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;';
+    m.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg1)">'
+      +'<div style="font-weight:600;color:var(--text)">&#128206; Podglad zalacznika</div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<a href="'+d.url+'" target="_blank" class="sm" style="text-decoration:none">&#11015; Pobierz</a>'
+      +'<button class="sm" onclick="document.getElementById(\'attach-modal\').style.display=\'none\'">&#10005; Zamknij</button>'
+      +'</div></div>'
+      +'<iframe src="'+d.url+'" style="flex:1;border:none;background:white"></iframe>';
+  })
   .catch(function(e){alert('Blad: '+e.message);});
 }
 function deleteAttachment(id){

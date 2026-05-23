@@ -1,4 +1,8 @@
 const express = require('express');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const cors = require('cors');
 const { Pool } = require('pg');
 const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
@@ -15,6 +19,18 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use(express.static('public'));
+
+// Cloudflare R2
+const r2 = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
+const R2_BUCKET = process.env.R2_BUCKET || 'vipremium-faktury';
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -54,6 +70,7 @@ async function initDB() {
         vat_amount NUMERIC(14,2) DEFAULT NULL,
         vehicles TEXT DEFAULT '[]',
         vehicle_breakdown TEXT DEFAULT '[]',
+        attachment_url TEXT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -75,7 +92,8 @@ async function initDB() {
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_country VARCHAR(10) DEFAULT NULL",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,2) DEFAULT NULL",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicles TEXT DEFAULT '[]'",
-      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicle_breakdown TEXT DEFAULT '[]'"
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicle_breakdown TEXT DEFAULT '[]'",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS attachment_url TEXT DEFAULT NULL"
     ];
     for (const sql of migrations) {
       await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
@@ -134,6 +152,7 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
       vatAmount: r.vat_amount ? parseFloat(r.vat_amount) : null,
       vehicles: JSON.parse(r.vehicles || '[]'),
       vehicleBreakdown: JSON.parse(r.vehicle_breakdown || '[]'),
+      attachmentUrl: r.attachment_url || null,
     }));
     res.json(rows);
   } catch (e) {
@@ -284,6 +303,62 @@ app.get('/api/nbp/:currency/:date', async (req, res) => {
     } catch (e) {}
   }
   res.status(404).json({ error: 'Kurs NBP nie znaleziony' });
+});
+
+// UPLOAD attachment
+app.post('/api/invoices/:id/attachment', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Brak pliku' });
+    const id = req.params.id;
+    const ext = req.file.originalname.split('.').pop().toLowerCase();
+    if (!['pdf','jpg','jpeg','png'].includes(ext))
+      return res.status(400).json({ error: 'Dozwolone: PDF, JPG, PNG' });
+    const key = `faktury/${id}.${ext}`;
+    await r2.send(new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+    }));
+    // Generuj signed URL (wazny 7 dni)
+    const url = await getSignedUrl(r2, new PutObjectCommand({ Bucket: R2_BUCKET, Key: key }), { expiresIn: 604800 });
+    // Zapisz klucz w bazie
+    const publicUrl = R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : key;
+    await pool.query('UPDATE invoices SET attachment_url = $1 WHERE id = $2', [key, id]);
+    res.json({ ok: true, key, url: publicUrl });
+  } catch (e) {
+    console.error('Upload error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET signed URL for attachment
+app.get('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
+    if (!result.rows.length || !result.rows[0].attachment_url)
+      return res.status(404).json({ error: 'Brak zalacznika' });
+    const key = result.rows[0].attachment_url;
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const signedUrl = await getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }), { expiresIn: 3600 });
+    res.json({ url: signedUrl });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE attachment
+app.delete('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
+    if (result.rows.length && result.rows[0].attachment_url) {
+      await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: result.rows[0].attachment_url }));
+      await pool.query('UPDATE invoices SET attachment_url = NULL WHERE id = $1', [req.params.id]);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Export CSV

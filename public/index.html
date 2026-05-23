@@ -231,6 +231,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div id="lmetrics"></div>
       <div id="lfilters" style="margin-bottom:12px"></div>
       <div id="ltable"></div>
+      <div id="lprev" style="display:none;margin-top:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em">&#128206; Podglad zalacznika</div>
+          <div style="display:flex;gap:8px"><a id="lprev-dl" href="#" target="_blank" class="sm" style="text-decoration:none">&#11015; Pobierz</a><button class="sm" onclick="document.getElementById('lprev').style.display='none'">&#10005; Zamknij</button></div>
+        </div>
+        <iframe id="lprev-frame" src="" style="width:100%;height:800px;border-radius:8px;border:0.5px solid var(--border);background:white"></iframe>
+      </div>
     </div>
     <div id="page-vehicles" style="display:none">
       <h1>Koszty per auto</h1>
@@ -1645,17 +1652,15 @@ function openAttachment(id){
   fetch('/api/invoices/'+id+'/attachment',{headers:{'x-auth-token':tok()}})
   .then(function(r){return r.json();}).then(function(d){
     if(!d.url){alert('Brak zalacznika');return;}
-    // Pokaz modal z podgladem inline
-    var m=document.getElementById('attach-modal');
-    if(!m){m=document.createElement('div');m.id='attach-modal';document.body.appendChild(m);}
-    m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;';
-    m.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg1)">'
-      +'<div style="font-weight:600;color:var(--text)">&#128206; Podglad zalacznika</div>'
-      +'<div style="display:flex;gap:8px">'
-      +'<a href="'+d.url+'" target="_blank" class="sm" style="text-decoration:none">&#11015; Pobierz</a>'
-      +'<button class="sm" onclick="document.getElementById(\'attach-modal\').style.display=\'none\'">&#10005; Zamknij</button>'
-      +'</div></div>'
-      +'<iframe src="'+d.url+'" style="flex:1;border:none;background:white"></iframe>';
+    var prev=document.getElementById('lprev');
+    var frame=document.getElementById('lprev-frame');
+    var dl=document.getElementById('lprev-dl');
+    if(prev&&frame){
+      frame.src=d.url;
+      if(dl)dl.href=d.url;
+      prev.style.display='block';
+      prev.scrollIntoView({behavior:'smooth',block:'start'});
+    }
   })
   .catch(function(e){alert('Blad: '+e.message);});
 }

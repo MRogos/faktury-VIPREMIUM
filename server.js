@@ -267,10 +267,6 @@ app.post('/api/scan', requireAuth, async (req, res) => {
   try {
     // Force max_tokens to ensure complete JSON response
     const body = { ...req.body, max_tokens: 16000 };
-    // Add prefill to force JSON - assistant starts responding with {
-    if(body.messages && !body.messages.find(m => m.role === 'assistant')) {
-      body.messages = [...body.messages, { role: 'assistant', content: '{' }];
-    }
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

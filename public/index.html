@@ -886,7 +886,7 @@ function sfile(file){
     var _fl=FLEET.join(',');
     var sys='ODPOWIADAJ WYLACZNIE SAMYM JSON - zadnego tekstu przed ani po. Jestes systemem OCR faktur transportowych.\n{"num":"numer","date":"YYYY-MM-DD","due_date":"YYYY-MM-DD lub null","contractor":"wystawca","buyer":"nabywca","type":"sale lub buy","brutto":liczba_total_brutto,"netto":liczba_total_netto,"vat_rate":liczba,"vat_amount":kwota_VAT,"vat_country":"kod_kraju","currency":"KOD","description":"max 80 znakow","raw_text":"pierwsze 300 znakow","confidence":"high/medium/low","vehicle_breakdown":[{"plate":"TABLICA","amount":suma_brutto}]}\nKRYTYCZNE: vat_country=kraj wystawcy (DE/GB/FR/BE/NL/PL). vat_amount=kwota VAT z faktury. vehicle_breakdown: przejrzyj KAZDA strone, znane tablice: '+_fl+'. Stare->nowe: DW1VT08->DSR80719,DW1WN03->DSR80874,DW5VX38->DSR80682. Per tablica ZSUMUJ BRUTTO wszystkich pozycji. type=sale TYLKO gdy wystawca=Vipremium/VT/PT&L/ET&VG. Stacje paliw (Shell, Orlen, BP, Circle K, Lotos) i wszyscy dostawcy uslug to ZAWSZE type=buy. KLUCZOWE: vat_rate=DOMINUJACA stawka VAT. vat_amount=DOKLADNA LACZNA kwota VAT z podsumowania faktury (przepisz z dokumentu; dla wielu stawek - suma wszystkich kwot VAT). netto=kwota bez VAT. Jesli n/p/nie podlega/reverse charge -> vat_rate=0 i vat_amount=0. TYLKO JSON.';
     return fetch('/api/scan',{method:'POST',headers:ah(),body:JSON.stringify({
-      model:'claude-sonnet-4-6',max_tokens:4000,system:sys,
+      model:'claude-sonnet-4-6',max_tokens:8000,system:sys,
       messages:[{role:'user',content:[block,{type:'text',text:'Przeanalizuj fakture, zwroc JSON.'}]}]
     })});
   }).then(function(r){
@@ -898,7 +898,10 @@ function sfile(file){
     var ai;
     try{
       var _jm=txt.match(/\{[\s\S]*\}/);if(_jm)txt=_jm[0];
+      // Napraw uciety JSON - usun ostatni niepelny klucz/wartosc
       txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');
+      txt=txt.replace(/,\s*"[^"]*":\s*$/,'');
+      txt=txt.replace(/,\s*"[^"]*"$/,'');
       if(txt.trim().slice(-1)!=='}')txt+='}';
       ai=JSON.parse(txt);
     }catch(e){throw new Error('AI zwrocil nieprawidlowy JSON: '+txt.slice(0,80));}

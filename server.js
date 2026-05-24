@@ -265,6 +265,8 @@ app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
 // SCAN proxy
 app.post('/api/scan', requireAuth, async (req, res) => {
   try {
+    // Force max_tokens to ensure complete JSON response
+    const body = { ...req.body, max_tokens: 8000 };
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -272,7 +274,7 @@ app.post('/api/scan', requireAuth, async (req, res) => {
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(body),
     });
     const data = await response.json();
     if (!response.ok) return res.status(response.status).json(data);

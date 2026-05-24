@@ -898,10 +898,11 @@ function sfile(file){
     var ai;
     try{
       var _jm=txt.match(/\{[\s\S]*\}/);if(_jm)txt=_jm[0];
-      // Napraw uciety JSON - usun ostatni niepelny klucz/wartosc
       txt=txt.replace(/,\s*"[^"]*":\s*"[^"]*$/,'');
       txt=txt.replace(/,\s*"[^"]*":\s*$/,'');
       txt=txt.replace(/,\s*"[^"]*"$/,'');
+      var _op=(txt.match(/\[/g)||[]).length-(txt.match(/\]/g)||[]).length;
+      for(var _oi=0;_oi<_op&&_oi<5;_oi++)txt+=']';
       if(txt.trim().slice(-1)!=='}')txt+='}';
       ai=JSON.parse(txt);
     }catch(e){throw new Error('AI zwrocil nieprawidlowy JSON: '+txt.slice(0,80));}

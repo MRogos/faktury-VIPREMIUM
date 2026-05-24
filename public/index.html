@@ -568,7 +568,7 @@ function buildTable(rows,title,color,isCosts){
     h+='<td style="font-family:var(--font);max-width:220px">'
       +dot
       +(i.num?'<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
-      +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||i.description||'-').slice(0,40)+nbp+'</div>'
+      +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+((i.type==='sale'&&i.buyer?i.buyer:i.contractor||i.description||'-')).slice(0,40)+nbp+'</div>'
       +'</td>';
     h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
     h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';

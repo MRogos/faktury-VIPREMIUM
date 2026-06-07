@@ -554,7 +554,7 @@ function buildTable(rows,title,color,isCosts){
     var isSel=!!sel[i.id];
     var nbp=i.nbpInfo?'<span title="'+i.nbpInfo+'" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">EUR</span>':'';
     var dot=unpaid?'<span style="color:var(--amber);font-size:9px;margin-right:3px">&#9679;</span>':'';
-    var bg=isSel?'background:rgba(240,96,96,.08)':unpaid?'background:rgba(240,176,96,.04)':'';
+    var bg=isSel?'background:rgba(240,96,96,.08)':unpaid?'background:rgba(240,176,96,.04)':(i.type==='buy'&&i.paid?'background:rgba(45,224,200,.04)':'');
     var overdueMark=isOverdue(i)?'color:var(--red);font-weight:600':'';
     var dueCell=isCosts?makeDueCell(i):'-';
     var noteCell='<input type="text" placeholder="Notatka..." value="'+(i.note||'')+'" data-id="'+i.id+'" data-action="note" onchange="onNoteChange(event)" style="width:120px;padding:2px 6px;background:transparent;border:0.5px solid transparent;border-radius:4px;color:var(--muted);font-size:11px">';

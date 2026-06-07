@@ -688,7 +688,8 @@ function renderFixed(){
     var montly=isIns?fmt(Math.round(inv.brutto/12*100)/100)+'/mies':'–';
     var _fleetVehs=(inv.vehicles||[]).filter(function(v){return FLEET.indexOf(v)>=0;});
     var vehs=(_fleetVehs.length&&_fleetVehs.length<FLEET.length)?_fleetVehs.join(', '):'wszystkie';
-    h+='<tr>';
+    var _rowBg=inv.paid?'background:rgba(45,224,200,.04)':'';
+    h+='<tr style="'+_rowBg+'">';
     h+='<td>'+(inv.date||'-')+'</td>';
     h+='<td style="max-width:160px;font-size:12px">'+(inv.contractor||'-').slice(0,35)+(isIns?' 🛡️':'')+'</td>';
     h+='<td style="max-width:200px;font-size:11px;color:var(--muted)">'+(inv.description||'-').slice(0,50)+'</td>';
@@ -738,7 +739,8 @@ function renderOffice(){
   h+='<div class="tw"><table><thead><tr><th>Data</th><th>Kontrahent</th><th>Opis</th><th style="text-align:right">Netto</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
   offInvs.forEach(function(inv){
     var n=Math.round(inv.brutto/(1+(inv.vatRate||0)/100)*100)/100;
-    h+='<tr><td>'+(inv.date||'-')+'</td>';
+    var _offBg=inv.paid?'background:rgba(45,224,200,.04)':'';
+    h+='<tr style="'+_offBg+'"><td>'+(inv.date||'-')+'</td>';
     h+='<td style="font-size:12px">'+(inv.contractor||'-').slice(0,35)+'</td>';
     h+='<td style="font-size:11px;color:var(--muted)">'+(inv.description||'-').slice(0,50)+'</td>';
     h+='<td style="text-align:right">'+fmt(n)+'</td>';
@@ -836,7 +838,8 @@ function renderFirms(){
         if(_fe){
         h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
         fi.forEach(function(i){
-          h+='<tr><td>'+(i.date||'-')+'</td>';
+          var _fbg=(i.type==='buy'&&i.paid)?'background:rgba(45,224,200,.04)':(!i.paid&&i.type==='buy'?'background:rgba(240,176,96,.04)':'');
+          h+='<tr style="'+_fbg+'"><td>'+(i.date||'-')+'</td>';
           h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
           var _fc=CATS.find(function(x){return x.id===i.costCat;});
           h+='<td style="font-size:12px;white-space:nowrap">'+(_fc&&i.type==='buy'?_fc.icon+' '+_fc.label:'')+'</td>';
@@ -2110,7 +2113,8 @@ function renderVehicles(){
       vehInvs2.forEach(function(i){
         var cat=CATS.find(function(x){return x.id===i.costCat;})||{icon:'📦',label:'Inne'};
         var share=getVehShare(i,selVeh);
-        h+='<tr><td>'+(i.date||'-')+'</td>';
+        var _vbg=i.paid?'background:rgba(45,224,200,.04)':'';
+        h+='<tr style="'+_vbg+'"><td>'+(i.date||'-')+'</td>';
         h+='<td>'+cat.icon+'</td>';
         h+='<td style="max-width:220px"><div style="font-weight:600;font-size:12px">'+(i.num||'-')+'</div><div style="opacity:.5;font-size:11px">'+(i.contractor||'').slice(0,35)+'</div></td>';
         h+='<td style="text-align:right;font-size:12px">'+fmt(i.brutto)+'</td>';

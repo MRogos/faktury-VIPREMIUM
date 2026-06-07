@@ -1,36 +1,23 @@
 const express = require('express');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const cors = require('cors');
 const { Pool } = require('pg');
 const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// No cache for API
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
 
 app.use(express.static('public'));
-
-// Cloudflare R2
-const r2 = new S3Client({
-  region: 'auto',
-  endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
-const R2_BUCKET = process.env.R2_BUCKET || 'vipremium-faktury';
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -39,6 +26,17 @@ const pool = new Pool({
 
 const APP_PASSWORD = process.env.APP_PASSWORD || 'vipremium2026';
 const WORKER_PASSWORD = process.env.WORKER_PASSWORD || 'pracownik2026';
+
+// R2 client
+const r2 = process.env.R2_ENDPOINT ? new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+}) : null;
+const R2_BUCKET = process.env.R2_BUCKET || 'vipremium-faktury';
 
 // Init DB
 async function initDB() {
@@ -66,15 +64,15 @@ async function initDB() {
         due_date VARCHAR(20),
         note TEXT,
         cost_cat VARCHAR(20) DEFAULT 'other',
-        vat_country VARCHAR(10) DEFAULT NULL,
-        vat_amount NUMERIC(14,2) DEFAULT NULL,
         vehicles TEXT DEFAULT '[]',
         vehicle_breakdown TEXT DEFAULT '[]',
-        attachment_url TEXT DEFAULT NULL,
+        vat_country VARCHAR(5),
+        vat_amount NUMERIC(14,4),
+        attachment_url TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    // Migrations - add all missing columns
+    // Migrations
     const migrations = [
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid BOOLEAN DEFAULT FALSE",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date VARCHAR(20)",
@@ -89,11 +87,11 @@ async function initDB() {
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'PLN'",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_rate INTEGER DEFAULT 0",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_cat VARCHAR(20) DEFAULT 'other'",
-      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_country VARCHAR(10) DEFAULT NULL",
-      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,2) DEFAULT NULL",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicles TEXT DEFAULT '[]'",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicle_breakdown TEXT DEFAULT '[]'",
-      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS attachment_url TEXT DEFAULT NULL"
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_country VARCHAR(5)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,4)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS attachment_url TEXT",
     ];
     for (const sql of migrations) {
       await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
@@ -148,10 +146,10 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
       dueDate: r.due_date || null,
       note: r.note || null,
       costCat: r.cost_cat || 'other',
-      vatCountry: r.vat_country || null,
-      vatAmount: r.vat_amount ? parseFloat(r.vat_amount) : null,
       vehicles: JSON.parse(r.vehicles || '[]'),
       vehicleBreakdown: JSON.parse(r.vehicle_breakdown || '[]'),
+      vatCountry: r.vat_country || null,
+      vatAmount: r.vat_amount ? parseFloat(r.vat_amount) : null,
       attachmentUrl: r.attachment_url || null,
     }));
     res.json(rows);
@@ -161,21 +159,23 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
   }
 });
 
-// POST invoice
+// POST invoice (UPSERT)
 app.post('/api/invoices', requireAuth, async (req, res) => {
   try {
     const i = req.body;
     if (!i.id) return res.status(400).json({ error: 'Missing id' });
-    
+
     await pool.query(`
       INSERT INTO invoices (
         id, company, type, num, date, contractor, buyer, description,
-        brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date, 
-        nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat, vat_country, vat_amount, vehicles, vehicle_breakdown
+        brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date,
+        nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat,
+        vehicles, vehicle_breakdown, vat_country, vat_amount
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,
-        $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
+        $15,$16,$17,$18,$19,$20,$21,
+        $22,$23,$24,$25
       )
       ON CONFLICT (id) DO UPDATE SET
         company = EXCLUDED.company,
@@ -197,10 +197,10 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
         due_date = EXCLUDED.due_date,
         note = EXCLUDED.note,
         cost_cat = EXCLUDED.cost_cat,
-        vat_country = EXCLUDED.vat_country,
-        vat_amount = EXCLUDED.vat_amount,
         vehicles = EXCLUDED.vehicles,
-        vehicle_breakdown = EXCLUDED.vehicle_breakdown
+        vehicle_breakdown = EXCLUDED.vehicle_breakdown,
+        vat_country = EXCLUDED.vat_country,
+        vat_amount = EXCLUDED.vat_amount
     `, [
       i.id, i.company || 'vt', i.type || 'buy', i.num || '', i.date || '',
       i.contractor || '', i.buyer || '', i.description || '',
@@ -208,9 +208,10 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
       i.currency || 'PLN', i.nbpRate || null, i.nbpDate || null,
       i.nbpTable || null, i.nbpInfo || null, i.confidence || 'medium',
       i.paid || false, i.dueDate || null, i.note || null,
-      i.costCat || 'other', i.vatCountry || null, i.vatAmount || null, JSON.stringify(i.vehicles || []), JSON.stringify(i.vehicleBreakdown || [])
+      i.costCat || 'other', JSON.stringify(i.vehicles || []), JSON.stringify(i.vehicleBreakdown || []),
+      i.vatCountry || null, i.vatAmount || null
     ]);
-    
+
     console.log('Saved invoice:', i.id, i.num, i.brutto);
     res.json({ ok: true });
   } catch (e) {
@@ -255,7 +256,58 @@ app.patch('/api/invoices/:id/due', requireAuth, async (req, res) => {
 // DELETE invoice
 app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
   try {
+    // Usun attachment jesli jest
+    const r = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
+    if (r.rows[0]?.attachment_url && r2) {
+      await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: r.rows[0].attachment_url })).catch(() => {});
+    }
     await pool.query('DELETE FROM invoices WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST attachment
+app.post('/api/invoices/:id/attachment', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!r2) return res.status(500).json({ error: 'R2 not configured' });
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file' });
+    const key = `inv/${req.params.id}/${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+    await r2.send(new PutObjectCommand({
+      Bucket: R2_BUCKET, Key: key,
+      Body: file.buffer, ContentType: file.mimetype
+    }));
+    await pool.query('UPDATE invoices SET attachment_url = $1 WHERE id = $2', [key, req.params.id]);
+    res.json({ ok: true, key });
+  } catch (e) {
+    console.error('Attachment upload error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET attachment (presigned URL)
+app.get('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
+    const key = r.rows[0]?.attachment_url;
+    if (!key) return res.json({ url: null });
+    if (!r2) return res.json({ url: null });
+    const url = await getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }), { expiresIn: 3600 });
+    res.json({ url });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE attachment
+app.delete('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
+    const key = r.rows[0]?.attachment_url;
+    if (key && r2) await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(() => {});
+    await pool.query('UPDATE invoices SET attachment_url = NULL WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -265,8 +317,6 @@ app.delete('/api/invoices/:id', requireAuth, async (req, res) => {
 // SCAN proxy
 app.post('/api/scan', requireAuth, async (req, res) => {
   try {
-    // Force max_tokens to ensure complete JSON response
-    const body = { ...req.body, max_tokens: 16000 };
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -274,7 +324,7 @@ app.post('/api/scan', requireAuth, async (req, res) => {
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(req.body),
     });
     const data = await response.json();
     if (!response.ok) return res.status(response.status).json(data);
@@ -296,84 +346,24 @@ app.get('/api/nbp/:currency/:date', async (req, res) => {
       const r = await fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${currency}/${ds}/?format=json`);
       if (r.ok) {
         const data = await r.json();
-        return res.json({
-          rate: data.rates[0].mid,
-          date: data.rates[0].effectiveDate,
-          table: data.rates[0].no
-        });
+        return res.json({ rate: data.rates[0].mid, date: data.rates[0].effectiveDate, table: data.rates[0].no });
       }
     } catch (e) {}
   }
   res.status(404).json({ error: 'Kurs NBP nie znaleziony' });
 });
 
-// UPLOAD attachment
-app.post('/api/invoices/:id/attachment', requireAuth, upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Brak pliku' });
-    const id = req.params.id;
-    const ext = req.file.originalname.split('.').pop().toLowerCase();
-    if (!['pdf','jpg','jpeg','png'].includes(ext))
-      return res.status(400).json({ error: 'Dozwolone: PDF, JPG, PNG' });
-    const key = `faktury/${id}.${ext}`;
-    await r2.send(new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-    }));
-    // Generuj signed URL (wazny 7 dni)
-    const url = await getSignedUrl(r2, new PutObjectCommand({ Bucket: R2_BUCKET, Key: key }), { expiresIn: 604800 });
-    // Zapisz klucz w bazie
-    const publicUrl = R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : key;
-    await pool.query('UPDATE invoices SET attachment_url = $1 WHERE id = $2', [key, id]);
-    res.json({ ok: true, key, url: publicUrl });
-  } catch (e) {
-    console.error('Upload error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// GET signed URL for attachment
-app.get('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
-    if (!result.rows.length || !result.rows[0].attachment_url)
-      return res.status(404).json({ error: 'Brak zalacznika' });
-    const key = result.rows[0].attachment_url;
-    const { GetObjectCommand } = require('@aws-sdk/client-s3');
-    const signedUrl = await getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }), { expiresIn: 3600 });
-    res.json({ url: signedUrl });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// DELETE attachment
-app.delete('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT attachment_url FROM invoices WHERE id = $1', [req.params.id]);
-    if (result.rows.length && result.rows[0].attachment_url) {
-      await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: result.rows[0].attachment_url }));
-      await pool.query('UPDATE invoices SET attachment_url = NULL WHERE id = $1', [req.params.id]);
-    }
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // Export CSV
 app.get('/api/export/csv', requireAuth, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM invoices ORDER BY date DESC');
-    const headers = ['ID','Firma','Typ','Numer','Data','Kontrahent','Opis','Brutto PLN','Brutto orig','Waluta','VAT%','Kurs NBP','Termin','Notatka','Oplacona'];
+    const headers = ['ID','Firma','Typ','Numer','Data','Kontrahent','Opis','Brutto PLN','Brutto orig','Waluta','VAT%','Kurs NBP','VAT kraj','Termin','Notatka','Oplacona'];
     const csv = [headers.join(';')].concat(result.rows.map(r => [
       r.id, r.company, r.type, (r.num||'').replace(/;/g,','),
       r.date||'', (r.contractor||'').replace(/;/g,','),
       (r.description||'').replace(/;/g,','),
       r.brutto, r.brutto_orig||'', r.currency||'PLN',
-      r.vat_rate||0, r.nbp_rate||'',
+      r.vat_rate||0, r.nbp_rate||'', r.vat_country||'',
       r.due_date||'', (r.note||'').replace(/;/g,','),
       r.paid?'TAK':'NIE'
     ].join(';'))).join('\n');

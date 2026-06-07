@@ -637,7 +637,8 @@ function renderFixed(){
     if(inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
       inv.vehicleBreakdown.forEach(function(vb){
         if(vehMonth[vb.plate]){
-          var amt=isIns?Math.round((vb.amount||monthlyBrutto/inv.vehicleBreakdown.length)/12*100)/100:(vb.amount||0);
+          var rawAmt=parseFloat(vb.amount)||0;
+          var amt=isIns?Math.round((rawAmt||monthlyBrutto/inv.vehicleBreakdown.length)/12*100)/100:(rawAmt||0);
           if(!amt)amt=Math.round(monthlyBrutto/inv.vehicleBreakdown.length*100)/100;
           vehMonth[vb.plate].total+=amt;
           vehMonth[vb.plate].items.push({inv:inv,amt:amt,isIns:isIns});
@@ -1033,7 +1034,7 @@ function sfile(file){
       nbpRate:null,nbpDate:null,nbpTable:null,nbpInfo:null,confidence:ai.confidence||'medium',
       bruttoOrig:null,paid:false,dueDate:ai.due_date||null,note:null,
       costCat:autoCat,vehicles:autoVehicles,vehicleBreakdown:vehicleBreakdown,
-      vatCountry:ai.vat_country||null,vatAmount:parseFloat(ai.vat_amount)||null};
+      vatCountry:ai.vat_country||null,vatAmount:(ai.vat_amount!==undefined&&ai.vat_amount!==null)?parseFloat(ai.vat_amount):null};
     if(pending.currency!=='PLN'){
       setMsg('sstatus','<span class="spin">&#8635;</span> Pobieram kurs NBP...','info');
       return fetch('/api/nbp/'+pending.currency+'/'+pending.date).then(function(r){
@@ -2029,19 +2030,24 @@ function renderVehicles(){
     if(inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
       var vb=inv.vehicleBreakdown.find(function(x){return x.plate===veh;});
       if(vb){
-        var amt=parseFloat(vb.amount)||0;if(amt<=0)return 0;
-        var bdTotal=inv.vehicleBreakdown.reduce(function(a,x){return a+(parseFloat(x.amount)||0);},0);
-        if(bdTotal>0&&inv.brutto>0)return Math.round(inv.brutto*(amt/bdTotal)*100)/100;
-        return Math.round(amt*((inv.currency&&inv.currency!=='PLN'&&inv.nbpRate)?inv.nbpRate:1)*100)/100;
+        var amt=parseFloat(vb.amount)||0;
+        if(amt>0){
+          var bdTotal=inv.vehicleBreakdown.reduce(function(a,x){return a+(parseFloat(x.amount)||0);},0);
+          if(bdTotal>0&&inv.brutto>0)return Math.round(inv.brutto*(amt/bdTotal)*100)/100;
+          return Math.round(amt*((inv.currency&&inv.currency!=='PLN'&&inv.nbpRate)?inv.nbpRate:1)*100)/100;
+        }
+        // VB ma plate ale amount=0 -> rowny podzial przez liczbe aut w VB
+        return Math.round(inv.brutto/inv.vehicleBreakdown.length*100)/100;
       }
     }
-    if(!inv.vehicles||!inv.vehicles.length)return 0;
-    return inv.brutto/inv.vehicles.length;
+    var vehs=(inv.vehicles||[]);
+    if(!vehs.length)return 0;
+    return Math.round(inv.brutto/vehs.length*100)/100;
   }
 
   var vehData=FLEET.map(function(veh){
     var cats={};VCOLS.forEach(function(c){cats[c.id]=0;});
-    var vehInvs=buyInvs.filter(function(i){return i.vehicles&&i.vehicles.indexOf(veh)>=0;});
+    var vehInvs=buyInvs.filter(function(i){return (i.vehicles||[]).indexOf(veh)>=0;});
     vehInvs.forEach(function(i){
       var cat=i.costCat||'other';
       if(cat==='customs'||cat==='office')return;
@@ -2053,7 +2059,8 @@ function renderVehicles(){
         if(i.vehicleBreakdown&&i.vehicleBreakdown.length){
           var vb=i.vehicleBreakdown.find(function(x){return x.plate===veh;});
           if(vb&&FLEET.indexOf(vb.plate)>=0){
-            cats['fixed']+=isIns?Math.round(i.brutto/12/i.vehicleBreakdown.length*100)/100:(vb.amount||Math.round(mb/i.vehicleBreakdown.length*100)/100);
+            var _vbAmt=parseFloat(vb.amount)||0;
+            cats['fixed']+=isIns?Math.round(i.brutto/12/i.vehicleBreakdown.length*100)/100:(_vbAmt||Math.round(mb/i.vehicleBreakdown.length*100)/100);
           }
         } else if(fleetV.length>0&&fleetV.indexOf(veh)>=0){
           cats['fixed']+=Math.round(mb/fleetV.length*100)/100;

@@ -540,8 +540,15 @@ function buildTable(rows,title,color,isCosts){
       var diff=new Date(inv.dueDate)-new Date();
       days=Math.ceil(diff/(1000*60*60*24));
     }
-    var col=!inv.dueDate?'var(--muted)':days<0?'var(--red)':days<=2?'var(--red)':days<=7?'var(--amber)':'var(--green)';
-    var label=!inv.dueDate?'':days<0?('Minął '+Math.abs(days)+'d'):days===0?'DZISIAJ!':days===1?'Jutro':(days+'d');
+    // Jezeli oplacona - zawsze muted, bez alarmu
+    var col,label;
+    if(inv.paid){
+      col='var(--muted)';
+      label=inv.dueDate?(days<0?'✓ zapł.':'✓ zapł.'):'';
+    } else {
+      col=!inv.dueDate?'var(--muted)':days<0?'var(--red)':days<=2?'var(--red)':days<=7?'var(--amber)':'var(--green)';
+      label=!inv.dueDate?'':days<0?('Minął '+Math.abs(days)+'d'):days===0?'DZISIAJ!':days===1?'Jutro':(days+'d');
+    }
     return '<div style="display:flex;flex-direction:column;gap:1px">'
       +'<input type="date" value="'+(inv.dueDate||'')+'" data-id="'+inv.id+'" data-action="due" onchange="onDueChange(event)" '
       +'style="background:transparent;border:0.5px solid var(--border);border-radius:4px;color:'+col+';font-size:11px;font-family:var(--mono);width:118px;padding:2px 4px;cursor:pointer">'
@@ -554,7 +561,7 @@ function buildTable(rows,title,color,isCosts){
     var isSel=!!sel[i.id];
     var nbp=i.nbpInfo?'<span title="'+i.nbpInfo+'" style="cursor:help;margin-left:3px;opacity:.4;font-size:10px">EUR</span>':'';
     var dot=unpaid?'<span style="color:var(--amber);font-size:9px;margin-right:3px">&#9679;</span>':'';
-    var bg=isSel?'background:rgba(240,96,96,.08)':unpaid?'background:rgba(240,176,96,.04)':(i.type==='buy'&&i.paid?'background:rgba(45,224,200,.04)':'');
+    var bg=isSel?'background:rgba(240,96,96,.08)':unpaid?'background:rgba(240,176,96,.04)':(i.type==='buy'&&i.paid?'background:rgba(45,224,200,.07)':'');
     var overdueMark=isOverdue(i)?'color:var(--red);font-weight:600':'';
     var dueCell=isCosts?makeDueCell(i):'-';
     var noteCell='<input type="text" placeholder="Notatka..." value="'+(i.note||'')+'" data-id="'+i.id+'" data-action="note" onchange="onNoteChange(event)" style="width:120px;padding:2px 6px;background:transparent;border:0.5px solid transparent;border-radius:4px;color:var(--muted);font-size:11px">';
@@ -688,7 +695,7 @@ function renderFixed(){
     var montly=isIns?fmt(Math.round(inv.brutto/12*100)/100)+'/mies':'–';
     var _fleetVehs=(inv.vehicles||[]).filter(function(v){return FLEET.indexOf(v)>=0;});
     var vehs=(_fleetVehs.length&&_fleetVehs.length<FLEET.length)?_fleetVehs.join(', '):'wszystkie';
-    var _rowBg=inv.paid?'background:rgba(45,224,200,.04)':'';
+    var _rowBg=inv.paid?'background:rgba(45,224,200,.07)':'';
     h+='<tr style="'+_rowBg+'">';
     h+='<td>'+(inv.date||'-')+'</td>';
     h+='<td style="max-width:160px;font-size:12px">'+(inv.contractor||'-').slice(0,35)+(isIns?' 🛡️':'')+'</td>';
@@ -739,7 +746,7 @@ function renderOffice(){
   h+='<div class="tw"><table><thead><tr><th>Data</th><th>Kontrahent</th><th>Opis</th><th style="text-align:right">Netto</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
   offInvs.forEach(function(inv){
     var n=Math.round(inv.brutto/(1+(inv.vatRate||0)/100)*100)/100;
-    var _offBg=inv.paid?'background:rgba(45,224,200,.04)':'';
+    var _offBg=inv.paid?'background:rgba(45,224,200,.07)':'';
     h+='<tr style="'+_offBg+'"><td>'+(inv.date||'-')+'</td>';
     h+='<td style="font-size:12px">'+(inv.contractor||'-').slice(0,35)+'</td>';
     h+='<td style="font-size:11px;color:var(--muted)">'+(inv.description||'-').slice(0,50)+'</td>';
@@ -838,7 +845,7 @@ function renderFirms(){
         if(_fe){
         h+='<div class="tw"><table><thead><tr><th>Data</th><th>Typ</th><th>Nr / Kontrahent</th><th>Kategoria</th><th style="text-align:right">Netto</th><th style="text-align:right">VAT%</th><th style="text-align:right">Brutto</th><th style="text-align:center">Opl.</th></tr></thead><tbody>';
         fi.forEach(function(i){
-          var _fbg=(i.type==='buy'&&i.paid)?'background:rgba(45,224,200,.04)':(!i.paid&&i.type==='buy'?'background:rgba(240,176,96,.04)':'');
+          var _fbg=(i.type==='buy'&&i.paid)?'background:rgba(45,224,200,.07)':(!i.paid&&i.type==='buy'?'background:rgba(240,176,96,.04)':'');
           h+='<tr style="'+_fbg+'"><td>'+(i.date||'-')+'</td>';
           h+='<td><span class="badge '+(i.type==='sale'?'bs':'bb')+'">'+(i.type==='sale'?'Przychod':'Koszt')+'</span></td>';
           var _fc=CATS.find(function(x){return x.id===i.costCat;});
@@ -1745,8 +1752,8 @@ function saveEdit(id){
   inv.costCat=document.getElementById('ei-cat').value;
   inv.dueDate=document.getElementById('ei-due').value||null;
   inv.note=document.getElementById('ei-note').value||null;
-  var checked=document.querySelectorAll('#edit-modal input[type=checkbox]:checked');
-  inv.vehicles=Array.from(checked).map(function(x){return x.value;});
+  var checked=document.querySelectorAll('#edit-modal input[type=checkbox][value]');
+  inv.vehicles=Array.from(checked).filter(function(x){return x.checked&&x.value&&x.value.length>3;}).map(function(x){return x.value;});
   closeEdit();
   fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)})
   .then(function(r){return r.json();})
@@ -2113,7 +2120,7 @@ function renderVehicles(){
       vehInvs2.forEach(function(i){
         var cat=CATS.find(function(x){return x.id===i.costCat;})||{icon:'📦',label:'Inne'};
         var share=getVehShare(i,selVeh);
-        var _vbg=i.paid?'background:rgba(45,224,200,.04)':'';
+        var _vbg=i.paid?'background:rgba(45,224,200,.07)':'';
         h+='<tr style="'+_vbg+'"><td>'+(i.date||'-')+'</td>';
         h+='<td>'+cat.icon+'</td>';
         h+='<td style="max-width:220px"><div style="font-weight:600;font-size:12px">'+(i.num||'-')+'</div><div style="opacity:.5;font-size:11px">'+(i.contractor||'').slice(0,35)+'</div></td>';

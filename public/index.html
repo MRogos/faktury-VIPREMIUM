@@ -418,26 +418,25 @@ function renderCoTiles(){
     var co=CO_COLORS[id];
     var cnt=invs.filter(function(i){return id==='all'||i.company===id;}).length;
     var isOn=selCo===id;
-    var color=isOn?'color:'+co.color:'';
-    // Kafel firmy
-    h+='<div class="co-tile'+(isOn?' on':'')+'" onclick="pickCo(\''+id+'\',event)" style="--co-color:'+co.color+';--co-rgb:'+co.rgb+'">';
+    var nameColor=isOn?'color:'+co.color:'';
+    h+='<div class="co-tile'+(isOn?' on':'')+'" onclick="pickCo(\'' +id+ '\')" style="--co-color:'+co.color+';--co-rgb:'+co.rgb+'">';
     h+='<div class="co-tile-icon">'+co.icon+'</div>';
-    h+='<div style="flex:1;min-width:0"><div class="co-tile-name" style="'+color+'">'+co.short+'</div></div>';
+    h+='<div style="flex:1;min-width:0"><div class="co-tile-name" style="'+nameColor+'">'+co.short+'</div></div>';
     h+='<div class="co-tile-cnt">'+cnt+'</div>';
     if(id!=='all'){h+='<span class="co-tile-arr">&#9654;</span>';}
     h+='</div>';
-    // Rozwijane moduły - tylko dla firm (nie "wszystkie")
     if(id!=='all'){
       h+='<div class="co-modules'+(isOn?' open':'')+'" id="mods-'+id+'">';
       CO_MODULES.forEach(function(mod){
         var isModOn=curTab===mod.id;
-        h+='<div class="co-mod'+(isModOn?' on':'')+'" onclick="goTab(\''+mod.id+'\')">'+mod.icon+' '+mod.label+'</div>';
+        h+='<div class="co-mod'+(isModOn?' on':'')+'" onclick="event.stopPropagation();goTab(\'' +mod.id+ '\')">';
+        h+=mod.icon+' '+mod.label+'</div>';
       });
       h+='</div>';
     }
   });
-  var el=document.getElementById('co-tiles');if(el)el.innerHTML=h;
-  // Dashboard active state
+  var el=document.getElementById('co-tiles');
+  if(el)el.innerHTML=h;
   var dashEl=document.getElementById('nav-dash');
   if(dashEl){
     var isDash=curTab==='dash';
@@ -446,7 +445,7 @@ function renderCoTiles(){
   }
 }
 
-function pickCo(id,event){
+function pickCo(id){
   var prev=selCo;
   selCo=id;selMonth=null;sel={};selVeh=null;selFirmCat=null;selLedgerCat=null;ledgerSearch='';
   renderCoTiles();
@@ -2216,6 +2215,7 @@ window.onload=function(){
     userRole=sessionStorage.getItem('vip_role')||'owner';
     g('login').style.display='none';
     g('app').style.display='flex';
+    selCo='vt';
     applyRole();
     loadInvs();
   }

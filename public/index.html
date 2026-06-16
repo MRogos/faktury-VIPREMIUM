@@ -2201,7 +2201,7 @@ function renderDashVehicles(){
   h+='<option value="">Cały rok</option>';
   MONTHS.forEach(function(m,mi){
     var pfx=selYear+'-'+m;
-    var has=invs.some(function(i){return i.type='buy'&&i.date&&i.date.indexOf(pfx)===0;});
+    var has=invs.some(function(i){return i.type==='buy'&&i.date&&i.date.indexOf(pfx)===0;});
     if(has)h+='<option value="'+m+'"'+(selM===m?' selected':'')+'>'+MN[mi]+'</option>';
   });
   h+='</select>';

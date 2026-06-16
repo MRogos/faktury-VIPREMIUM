@@ -2212,7 +2212,7 @@ function renderDashVehicles(){
     h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;padding:16px">';
     FLEET.forEach(function(v){
       var total=vehTotals[v]||0;
-      h+='<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer" onclick="goTab(\"vehicles\")">';
+      h+='<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer" data-veh="'+v+'" onclick="openVehDetail(this.getAttribute(&quot;data-veh&quot;))">';
       h+='<div style="font-family:var(--mono);font-weight:700;font-size:13px;color:var(--amber);margin-bottom:4px">'+v+'</div>';
       h+='<div style="font-weight:700;font-size:15px;color:'+(total>0?'var(--red)':'var(--muted)')+'">'+fmt(total)+'</div>';
       h+='</div>';
@@ -2221,6 +2221,13 @@ function renderDashVehicles(){
   }
   h+='</div>';
   return h;
+}
+
+function openVehDetail(v){
+  window._vehTab='auto';
+  selVeh=v;
+  selMonth=expF.dashVehMonth||'';
+  goTab('vehicles');
 }
 
 function renderVehicles(){

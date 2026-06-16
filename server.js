@@ -92,6 +92,7 @@ async function initDB() {
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_country VARCHAR(5)",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,4)",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS attachment_url TEXT",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_date VARCHAR(20)",
     ];
     for (const sql of migrations) {
       await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
@@ -143,6 +144,7 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
       nbpInfo: r.nbp_info,
       confidence: r.confidence,
       paid: r.paid || false,
+      paidDate: r.paid_date || null,
       dueDate: r.due_date || null,
       note: r.note || null,
       costCat: r.cost_cat || 'other',
@@ -170,12 +172,12 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
         id, company, type, num, date, contractor, buyer, description,
         brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date,
         nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat,
-        vehicles, vehicle_breakdown, vat_country, vat_amount
+        vehicles, vehicle_breakdown, vat_country, vat_amount, paid_date
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,
         $15,$16,$17,$18,$19,$20,$21,
-        $22,$23,$24,$25
+        $22,$23,$24,$25,$26
       )
       ON CONFLICT (id) DO UPDATE SET
         company = EXCLUDED.company,
@@ -200,7 +202,9 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
         vehicles = EXCLUDED.vehicles,
         vehicle_breakdown = EXCLUDED.vehicle_breakdown,
         vat_country = EXCLUDED.vat_country,
-        vat_amount = EXCLUDED.vat_amount
+        vat_amount = EXCLUDED.vat_amount,
+        paid = EXCLUDED.paid,
+        paid_date = EXCLUDED.paid_date
     `, [
       i.id, i.company || 'vt', i.type || 'buy', i.num || '', i.date || '',
       i.contractor || '', i.buyer || '', i.description || '',
@@ -209,7 +213,8 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
       i.nbpTable || null, i.nbpInfo || null, i.confidence || 'medium',
       i.paid || false, i.dueDate || null, i.note || null,
       i.costCat || 'other', JSON.stringify(i.vehicles || []), JSON.stringify(i.vehicleBreakdown || []),
-      i.vatCountry || null, i.vatAmount || null
+      i.vatCountry || null, i.vatAmount || null,
+      i.paidDate || null
     ]);
 
     console.log('Saved invoice:', i.id, i.num, i.brutto);

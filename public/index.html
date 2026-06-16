@@ -724,13 +724,13 @@ function buildTable(rows,title,color,isCosts){
 
     // Akcje
     h+='<div style="display:flex;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">';
-    h+='<button class="sm" onclick="setEditId(this)" style="padding:4px 8px" title="Edytuj">✏️</button>';
+    h+='<button class="sm" onclick="setEditId(this)" style="padding:3px 8px;font-size:11px" title="Edytuj">Edytuj</button>';
     if(i.attachmentUrl){
-      h+='<button class="sm" onclick="call_openAttachment(this)" style="padding:4px 8px" title="Załącznik">📎</button>';
+      h+='<button class="sm" onclick="call_openAttachment(this)" style="padding:3px 8px;font-size:11px;color:#2563eb" title="Załącznik">Zał.</button>';
     } else {
-      h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAttachmentEl(this)"><span style="display:inline-flex;align-items:center;padding:4px 8px;border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer;color:var(--muted)" title="Dodaj załącznik">📂</span></label>';
+      h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAttachmentEl(this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer;color:var(--muted)">+Zał.</span></label>';
     }
-    h+='<button class="sm del" onclick="setDelId(this)" style="padding:4px 8px" title="Usuń">✕</button>';
+    h+='<button class="sm del" onclick="setDelId(this)" style="padding:3px 8px;font-size:11px" title="Usuń">Usuń</button>';
     h+='</div>';
     h+='</div>';
 
@@ -1620,8 +1620,17 @@ function markAllPaid(paid){
 }
 function markSelPaid(){
   var ids=Object.keys(sel);if(!ids.length)return;
+  var today=new Date().toISOString().slice(0,10);
   var p=Promise.resolve();
-  ids.forEach(function(id){var i=invs.find(function(x){return x.id===id;});if(i&&i.type==='buy'&&!i.paid){p=p.then(function(){return fetch('/api/invoices/'+id+'/paid',{method:'PATCH',headers:ah(),body:JSON.stringify({paid:true})}).then(function(){i.paid=true;});});}});
+  ids.forEach(function(id){
+    var inv=invs.find(function(x){return x.id===id;});
+    if(inv&&inv.type==='buy'&&!inv.paid){
+      p=p.then(function(){
+        inv.paid=true;inv.paidDate=today;
+        return fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)}).then(function(){});
+      });
+    }
+  });
   p.then(function(){sel={};renderLedger();renderFirms();});
 }
 function delSel(){
@@ -1632,8 +1641,10 @@ function delSel(){
   p.then(function(){sel={};renderCoTiles();renderCur();});
 }
 function togglePaid(id,paid){
-  fetch('/api/invoices/'+id+'/paid',{method:'PATCH',headers:ah(),body:JSON.stringify({paid:paid})})
-  .then(function(){var i=invs.find(function(x){return x.id===id;});if(i)i.paid=paid;renderLedger();renderFirms();});
+  var inv=invs.find(function(x){return x.id===id;});
+  if(!inv)return;
+  if(paid){openPaidModal(id);}
+  else{inv.paid=false;inv.paidDate=null;fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)}).then(function(){loadInvs();});}
 }
 function delInv(id){
   if(!confirm('Usunac fakture?'))return;

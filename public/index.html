@@ -2378,47 +2378,40 @@ function renderVehicles(){
 function openPaidModal(id){
   var inv=invs.find(function(x){return x.id===id;});
   if(!inv)return;
+  window._currentPaidId=id; // zachowaj id globalnie
   var m=document.getElementById('paid-modal');
   if(!m){m=document.createElement('div');m.id='paid-modal';document.body.appendChild(m);}
   var today=new Date().toISOString().slice(0,10);
   var pd=inv.paidDate||today;
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
-  m.innerHTML='<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:360px;box-shadow:var(--shadow-md)">'
+  m.innerHTML='<div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;width:100%;max-width:360px;box-shadow:0 20px 40px rgba(0,0,0,.15)">'
     +'<div style="font-weight:700;font-size:16px;margin-bottom:4px">'+(inv.paid?'✏️ Zmień datę opłacenia':'✅ Oznacz jako opłaconą')+'</div>'
-    +'<div style="font-size:12px;color:var(--muted);margin-bottom:16px">'+(inv.num||'—')+' · '+(inv.contractor||'').slice(0,30)+'</div>'
-    +'<div class="fg" style="margin-bottom:16px"><label>Data opłacenia</label>'
-    +'<input type="date" id="paid-date-inp" value="'+pd+'" style="background:#fff;border:1.5px solid var(--border2);border-radius:8px;padding:8px 11px;font-size:14px;width:100%;color:var(--text)"></div>'
+    +'<div style="font-size:12px;color:#6b7280;margin-bottom:16px">'+(inv.num||'—')+' · '+(inv.contractor||'').slice(0,30)+'</div>'
+    +'<div style="margin-bottom:16px"><label style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">Data opłacenia</label>'
+    +'<input type="date" id="paid-date-inp" value="'+pd+'" style="background:#fff;border:1.5px solid #d1d5db;border-radius:8px;padding:8px 11px;font-size:14px;width:100%;color:#1a1d23"></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end">'
-    +(inv.paid?'<button class="sm del" onclick="markUnpaid_modal()">Cofnij opłacenie</button>':'')
-    +'<button class="sm" onclick="closePaidModal()">Anuluj</button>'
-    +'<button class="sm prim" onclick="savePaidDate_modal()">Zapisz</button>'
+    +(inv.paid?'<button onclick="markUnpaid_modal()" style="padding:6px 12px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:13px">Cofnij opłacenie</button>':'')
+    +'<button onclick="closePaidModal()" style="padding:6px 12px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:13px">Anuluj</button>'
+    +'<button onclick="savePaidDate_modal()" style="padding:6px 12px;border-radius:8px;border:none;background:#f59e0b;color:#fff;cursor:pointer;font-size:13px;font-weight:700">Zapisz</button>'
     +'</div></div>';
 }
-function savePaidDate(id){
+
+function savePaidDate_modal(){
+  var id=window._currentPaidId;
+  if(!id)return;
+  var inp=document.getElementById('paid-date-inp');
+  if(!inp)return;
+  savePaidDate(id,inp.value);
+}
+function closePaidModal(){var m=document.getElementById('paid-modal');if(m)m.style.display='none';}
+function savePaidDate(id,dateVal){
   var inv=invs.find(function(x){return x.id===id;});
   if(!inv)return;
-  var d=document.getElementById('paid-date-inp').value;
+  var d=dateVal||new Date().toISOString().slice(0,10);
   inv.paid=true;inv.paidDate=d;
   closePaidModal();
   fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)})
   .then(function(){loadInvs();});
-}
-function savePaidDate_modal(){
-  var inp=document.getElementById('paid-date-inp');
-  if(!inp)return;
-  var id=inp.getAttribute('data-inv-id');
-  if(id)savePaidDate(id);
-}
-function closePaidModal(){var m=document.getElementById('paid-modal');if(m)m.style.display='none';}
-function markUnpaid_modal(){
-  var m=document.getElementById('paid-modal');
-  if(!m)return;
-  var btn=m.querySelector('button[onclick="markUnpaid_modal()"]');
-  // Pobierz id z aktualnego modalu przez data-current-id
-  var inp=document.getElementById('paid-date-inp');
-  if(!inp)return;
-  var id=inp.getAttribute('data-inv-id');
-  if(id)markUnpaid(id);
 }
 function markUnpaid(id){
   var inv=invs.find(function(x){return x.id===id;});
@@ -2428,6 +2421,11 @@ function markUnpaid(id){
   fetch('/api/invoices',{method:'POST',headers:ah(),body:JSON.stringify(inv)})
   .then(function(){loadInvs();});
 }
+function markUnpaid_modal(){
+  var id=window._currentPaidId;
+  if(id)markUnpaid(id);
+}
+
 function onCardClick(e,el){
   var id=el?el.getAttribute('data-id'):null;
   // Klik na kartę - nic specjalnego (akcje mają własne handlery)

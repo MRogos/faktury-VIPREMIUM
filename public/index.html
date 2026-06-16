@@ -344,6 +344,7 @@ function setDelId(el){var t=el.dataset.id?el:(el.closest('[data-id]'));var id=t?
 function uploadAttachmentEl(input){var t=input.closest('[data-id]');var id=t?t.getAttribute('data-id'):null;if(id)uploadAttachment(id,input);}
 function toggleDashVeh(){expF.dashVehOpen=!expF.dashVehOpen;renderDash();}
 function setDashVehMonth(v){expF.dashVehMonth=v;expF.dashVehOpen=true;renderDash();}
+function setVehTab(btn){window._vehTab=btn.getAttribute('data-vtab');renderVehicles();}
 function toggleOverdue(){expF.overdue=!expF.overdue;renderLedger();}
 function setLedgerCat(v){selLedgerCat=(v==='__null__')?null:v;renderLedger();}
 var ledgerDateFrom='';
@@ -419,10 +420,9 @@ function renderTree(){renderCoTiles();}
 
 // Moduły dostępne per firma
 var CO_MODULES=[
-  {id:'ledger', label:'Księga',       icon:'≡'},
-  {id:'firms',  label:'Obliczenia',   icon:'📊'},
-  {id:'fixed',  label:'Koszty stałe', icon:'📌'},
-  {id:'office', label:'Biuro',        icon:'🏢'},
+  {id:'ledger',   label:'Księga',       icon:'≡'},
+  {id:'firms',    label:'Obliczenia',   icon:'📊'},
+  {id:'vehicles', label:'Koszty/auto',  icon:'🚛'},
 ];
 
 function renderCoTiles(){
@@ -653,6 +653,7 @@ function buildTable(rows,title,color,isCosts){
 
   // Karty faktur
   h+='<div style="display:flex;flex-direction:column;gap:0">';
+  window._invIds=window._invIds||{};
   rows.forEach(function(i,idx){
     var co=COS.find(function(x){return x.id===i.company;});
     var isSel=!!sel[i.id];
@@ -680,6 +681,8 @@ function buildTable(rows,title,color,isCosts){
     var borderLeft=isCosts?'border-left:3px solid '+borderColor+';':'border-left:3px solid #3b82f6;';
     var nbp=i.nbpInfo?'<span title="'+i.nbpInfo+'" style="cursor:help;font-size:10px;color:var(--muted);margin-left:4px">'+i.currency+'</span>':'';
 
+    var _iidx='_'+i.id.replace(/[^a-z0-9]/gi,'_');
+    window._invIds[_iidx]=i.id;
     h+='<div style="'+borderLeft+'background:'+selBg+';padding:10px 16px;border-bottom:1px solid var(--border);transition:background .1s;display:flex;align-items:center;gap:10px" '
       +'onclick="onCardClick(event,this)" data-id="'+i.id+'">';
 
@@ -713,12 +716,12 @@ function buildTable(rows,title,color,isCosts){
     if(isCosts){
       h+='<div style="text-align:center;flex-shrink:0;width:80px">';
       if(isPaid){
-        h+='<div data-inv="'+i.id+'" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:3px 8px;cursor:pointer" onclick="event.stopPropagation();openPaidModal(this.dataset.inv)" title="Kliknij aby zmienić datę">';
+        h+='<div onclick="event.stopPropagation();openPaidModal(window._invIds['+JSON.stringify(_iidx)+'])" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:3px 8px;cursor:pointer" title="Kliknij aby zmienić datę">';
         h+='<div style="font-size:10px;font-weight:700;color:#16a34a">✓ Opł.</div>';
         if(i.paidDate){h+='<div style="font-size:9px;color:#16a34a">'+i.paidDate+'</div>';}
         h+='</div>';
       } else {
-        h+='<div data-inv="'+i.id+'" style="cursor:pointer" onclick="event.stopPropagation();openPaidModal(this.dataset.inv)">';
+        h+='<div onclick="event.stopPropagation();openPaidModal(window._invIds['+JSON.stringify(_iidx)+'])" style="cursor:pointer">';
         h+='<div style="font-size:11px;font-weight:600;color:'+statusColor+'">'+statusLabel+'</div>';
         if(i.dueDate){h+='<div style="font-size:9px;color:var(--muted)">'+i.dueDate+'</div>';}
         h+='</div>';
@@ -728,13 +731,13 @@ function buildTable(rows,title,color,isCosts){
 
     // Akcje
     h+='<div style="display:flex;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">';
-    h+='<button class="sm" data-inv="'+i.id+'" onclick="openEdit(this.dataset.inv)" style="padding:3px 8px;font-size:11px">Edytuj</button>';
+    h+='<button onclick="openEdit(window._invIds['+JSON.stringify(_iidx)+'])" style="padding:3px 8px;font-size:11px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;color:#374151">Edytuj</button>';
     if(i.attachmentUrl){
-      h+='<button class="sm" data-inv="'+i.id+'" onclick="openAttachment(this.dataset.inv)" style="padding:3px 8px;font-size:11px;color:#2563eb">Zał.</button>';
+      h+='<button onclick="openAttachment(window._invIds['+JSON.stringify(_iidx)+'])" style="padding:3px 8px;font-size:11px;border:1px solid #bfdbfe;border-radius:6px;background:#eff6ff;cursor:pointer;color:#2563eb">Zał.</button>';
     } else {
-      h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" data-inv="'+i.id+'" onchange="uploadAttachment(this.dataset.inv,this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer;color:var(--muted)">+Zał.</span></label>';
+      h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="(function(f){uploadAttachment(window._invIds['+JSON.stringify(_iidx)+'],f)})(this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;color:#6b7280">+Zał.</span></label>';
     }
-    h+='<button class="sm del" data-inv="'+i.id+'" onclick="delInv(this.dataset.inv)" style="padding:3px 8px;font-size:11px">Usuń</button>';
+    h+='<button onclick="delInv(window._invIds['+JSON.stringify(_iidx)+'])" style="padding:3px 8px;font-size:11px;border:1px solid #fca5a5;border-radius:6px;background:#fef2f2;cursor:pointer;color:#dc2626">Usuń</button>';
     h+='</div>';
     h+='</div>';
 
@@ -753,7 +756,7 @@ function renderFixed(){
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   // Selektor miesiecy
   if(g('fixfilters')){
-    var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+    var mh=tabHtml+'<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
     mh+='<button class="sm '+(selMonth?'':'on')+'" onclick="selMonth=\'\';renderFixed()">Caly rok</button>';
     MONTHS.forEach(function(m,mi){
       var pfx=selYear+'-'+m;
@@ -2221,7 +2224,21 @@ function renderDashVehicles(){
 }
 
 function renderVehicles(){
-  g('vsub').textContent=periodLabel()+' • '+FLEET.length+' pojazdow';
+  g('vsub').textContent=periodLabel()+' • Koszty floty';
+  // Zakładki: Per auto / Koszty stałe / Biuro
+  var vTab=window._vehTab||'auto';
+  if(g('vfilters')){
+    var tabHtml='<div style="display:flex;gap:6px;margin-bottom:12px">';
+    ['auto','fixed','office'].forEach(function(tid){
+      var labels={'auto':'🚛 Per auto','fixed':'📌 Koszty stałe','office':'🏢 Biuro'};
+      var on=vTab===tid;
+      tabHtml+='<button data-vtab="'+tid+'" onclick="setVehTab(this)" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:'+(on?700:400)+';border:1.5px solid '+(on?'#f59e0b':'#d1d5db')+';background:'+(on?'#f59e0b':'#fff')+';color:'+(on?'#fff':'#374151')+'">'+labels[tid]+'</button>';
+    });;
+    tabHtml+='</div>';
+    if(vTab==='fixed'){g('vfilters').innerHTML=tabHtml;renderFixed();setTimeout(function(){if(g('fixcontent'))g('vcontent').innerHTML=g('fixcontent').innerHTML;},0);return;}
+    if(vTab==='office'){g('vfilters').innerHTML=tabHtml;renderOffice();setTimeout(function(){if(g('offcontent'))g('vcontent').innerHTML=g('offcontent').innerHTML;},0);return;}
+    // auto tab - dalsza logika poniżej
+  }
   if(g('vfilters')){
     var mh='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
     mh+='<button class="sm '+(selMonth?'':'on')+'" data-m="" onclick="selMonth=this.dataset.m;selVeh=null;renderVehicles()">Caly rok</button>';

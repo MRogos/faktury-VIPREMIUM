@@ -481,6 +481,7 @@ function goTab(t){
   if(impEl)impEl.style.opacity=t==='import'?'1':'0.7';
   // Odśwież kafle firm + moduły
   renderCoTiles();
+  renderCur();
 }
 function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();if(curTab==='fixed')renderFixed();if(curTab==='office')renderOffice();}
 

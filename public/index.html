@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
 <title>Vipremium — System Faktur</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1758,11 +1759,10 @@ function renderDash(){
   var vatForecast=userRole==='owner'?renderVATForecast():'';
   var foreignVatHtml=userRole==='owner'?renderForeignVAT():'';
   if(!invs.length){
-    // Sekcja koszty per auto na dashboardzie
-  var dashVehiclesHtml=renderDashVehicles();
-  g('dash-content').innerHTML='<div style="text-align:center;padding:3rem;color:var(--muted)"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:16px;font-weight:600;color:var(--amber);margin-bottom:8px">Brak połączenia z bazą danych</div><div style="font-size:13px">Sprawdź status serwera na Render.<br>Baza PostgreSQL nie odpowiada (ECONNREFUSED).<br><br><button class="prim" onclick="loadInvs()">↻ Odśwież</button></div></div>';
+    g('dash-content').innerHTML='<div style="text-align:center;padding:3rem;color:var(--muted)"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:16px;font-weight:600;color:var(--amber);margin-bottom:8px">Brak połączenia z bazą danych</div><div style="font-size:13px">Sprawdź status serwera.<br><br><button class="prim" onclick="loadInvs()">↻ Odśwież</button></div></div>';
     return;
   }
+  var dashVehiclesHtml=renderDashVehicles();
   g('dash-content').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+foreignVatHtml+vatForecast+dashVehiclesHtml;
   if(typeof Chart==='undefined')return;
   cos.forEach(function(c){

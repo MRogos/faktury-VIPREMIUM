@@ -334,10 +334,14 @@ var selVeh=null;
 var selFirmCat=null;
 var selLedgerCat=null;
 var ledgerSearch='';
-function setPaidId(el){var id=el.closest('[data-id]').getAttribute('data-id');openPaidModal(id);}
-function setEditId(el){var id=el.closest('[data-id]').getAttribute('data-id');openEdit(id);}
-function setDelId(el){var id=el.closest('[data-id]').getAttribute('data-id');delInv(id);}
-function uploadAttachmentEl(input){var id=input.closest('[data-id]')?.getAttribute('data-id');if(id)uploadAttachment(id,input);}
+function setPaidId(el){
+  var id=el.getAttribute('data-id')||el.closest('[data-id]')&&el.closest('[data-id]').getAttribute('data-id');
+  if(id)openPaidModal(id);
+  else console.warn('setPaidId: no data-id found',el);
+}
+function setEditId(el){var t=el.dataset.id?el:(el.closest('[data-id]'));var id=t?t.getAttribute('data-id'):null;if(id)openEdit(id);}
+function setDelId(el){var t=el.dataset.id?el:(el.closest('[data-id]'));var id=t?t.getAttribute('data-id'):null;if(id)delInv(id);}
+function uploadAttachmentEl(input){var t=input.closest('[data-id]');var id=t?t.getAttribute('data-id'):null;if(id)uploadAttachment(id,input);}
 function toggleDashVeh(){expF.dashVehOpen=!expF.dashVehOpen;renderDash();}
 function setDashVehMonth(v){expF.dashVehMonth=v;expF.dashVehOpen=true;renderDash();}
 function toggleOverdue(){expF.overdue=!expF.overdue;renderLedger();}
@@ -709,12 +713,12 @@ function buildTable(rows,title,color,isCosts){
     if(isCosts){
       h+='<div style="text-align:center;flex-shrink:0;width:80px">';
       if(isPaid){
-        h+='<div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:3px 8px;cursor:pointer" onclick="event.stopPropagation();setPaidId(this)" title="Kliknij aby zmienić datę">';
+        h+='<div data-inv="'+i.id+'" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:3px 8px;cursor:pointer" onclick="event.stopPropagation();openPaidModal(this.dataset.inv)" title="Kliknij aby zmienić datę">';
         h+='<div style="font-size:10px;font-weight:700;color:#16a34a">✓ Opł.</div>';
         if(i.paidDate){h+='<div style="font-size:9px;color:#16a34a">'+i.paidDate+'</div>';}
         h+='</div>';
       } else {
-        h+='<div style="cursor:pointer" onclick="event.stopPropagation();setPaidId(this)">';
+        h+='<div data-inv="'+i.id+'" style="cursor:pointer" onclick="event.stopPropagation();openPaidModal(this.dataset.inv)">';
         h+='<div style="font-size:11px;font-weight:600;color:'+statusColor+'">'+statusLabel+'</div>';
         if(i.dueDate){h+='<div style="font-size:9px;color:var(--muted)">'+i.dueDate+'</div>';}
         h+='</div>';
@@ -724,13 +728,13 @@ function buildTable(rows,title,color,isCosts){
 
     // Akcje
     h+='<div style="display:flex;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">';
-    h+='<button class="sm" onclick="setEditId(this)" style="padding:3px 8px;font-size:11px" title="Edytuj">Edytuj</button>';
+    h+='<button class="sm" data-inv="'+i.id+'" onclick="openEdit(this.dataset.inv)" style="padding:3px 8px;font-size:11px">Edytuj</button>';
     if(i.attachmentUrl){
-      h+='<button class="sm" onclick="call_openAttachment(this)" style="padding:3px 8px;font-size:11px;color:#2563eb" title="Załącznik">Zał.</button>';
+      h+='<button class="sm" data-inv="'+i.id+'" onclick="openAttachment(this.dataset.inv)" style="padding:3px 8px;font-size:11px;color:#2563eb">Zał.</button>';
     } else {
-      h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="uploadAttachmentEl(this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer;color:var(--muted)">+Zał.</span></label>';
+      h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" data-inv="'+i.id+'" onchange="uploadAttachment(this.dataset.inv,this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid var(--border2);border-radius:8px;font-size:11px;cursor:pointer;color:var(--muted)">+Zał.</span></label>';
     }
-    h+='<button class="sm del" onclick="setDelId(this)" style="padding:3px 8px;font-size:11px" title="Usuń">Usuń</button>';
+    h+='<button class="sm del" data-inv="'+i.id+'" onclick="delInv(this.dataset.inv)" style="padding:3px 8px;font-size:11px">Usuń</button>';
     h+='</div>';
     h+='</div>';
 

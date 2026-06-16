@@ -468,20 +468,19 @@ function goTab(t){
   curTab=t;
   ['scan','import','ledger','firms','dash','vehicles','fixed','office'].forEach(function(id){
     g('page-'+id).style.display=id===t?'':'none';
-    if(id==='ledger') g('nav-'+id).className='ni'+(id===t?' on':'');
   });
-  var scanEl=g('nav-scan'),impEl=g('nav-import'),firmsEl=g('nav-firms'),dashEl=g('nav-dash'),vehEl=g('nav-vehicles');
-  scanEl.style.opacity=t==='scan'?'1':'0.6';
-  impEl.style.opacity=t==='import'?'1':'0.6';
-  firmsEl.className='tile-firms'+(t==='firms'?' on':'');
-  dashEl.style.background=t==='dash'?'rgba(45,224,200,.15)':'transparent';
-  dashEl.style.borderColor=t==='dash'?'rgba(45,224,200,.4)':'transparent';
+  // Dashboard button
+  var dashEl=g('nav-dash');
+  if(dashEl){
+    dashEl.style.background=t==='dash'?'rgba(45,224,200,.15)':'transparent';
+    dashEl.style.borderColor=t==='dash'?'rgba(45,224,200,.4)':'transparent';
+  }
+  // Scan/import opacity
+  var scanEl=g('nav-scan'),impEl=g('nav-import');
+  if(scanEl)scanEl.style.opacity=t==='scan'?'1':'0.7';
+  if(impEl)impEl.style.opacity=t==='import'?'1':'0.7';
+  // Odśwież kafle firm + moduły
   renderCoTiles();
-  if(vehEl){vehEl.className='tile-firms'+(t==='vehicles'?' on':'');vehEl.style.borderColor=t==='vehicles'?'var(--amber)':'rgba(240,176,96,.2)';vehEl.style.background=t==='vehicles'?'rgba(240,176,96,.15)':'rgba(240,176,96,.06)';}
-  renderCur();
-  // Odśwież aktywny moduł w accordion
-  var _ct=document.getElementById('co-tiles');
-  if(_ct){_ct.querySelectorAll('.co-mod').forEach(function(el){var oc=el.getAttribute('onclick')||'';el.className='co-mod'+(oc.indexOf("'"+t+"'")>=0?' on':'');});}
 }
 function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();if(curTab==='fixed')renderFixed();if(curTab==='office')renderOffice();}
 

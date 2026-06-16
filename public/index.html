@@ -113,15 +113,22 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .tile-firms-icon{font-size:24px}
 .tile-firms-text{font-size:13px;font-weight:700;color:var(--accent)}
 .tile-firms-sub{font-size:11px;color:var(--muted);margin-top:2px}
-/* Kafle firm w sidebar */
-.co-tiles{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:0.5px solid var(--border);margin-bottom:6px}
-.co-tile{border-radius:10px;padding:10px 12px;cursor:pointer;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:10px}
+/* Kafle firm w sidebar - accordion */
+.co-tiles{padding:6px 8px;display:flex;flex-direction:column;gap:2px;border-bottom:0.5px solid var(--border);margin-bottom:4px}
+.co-tile{border-radius:8px;padding:7px 10px;cursor:pointer;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:8px}
 .co-tile:hover{background:rgba(255,255,255,.04)}
-.co-tile.on{border-color:var(--co-color,var(--accent));background:rgba(var(--co-rgb,45,224,200),.12)}
-.co-tile-icon{font-size:18px;flex-shrink:0;width:28px;text-align:center}
-.co-tile-name{font-size:12px;font-weight:700;color:var(--text)}
-.co-tile-short{font-size:10px;color:var(--muted);font-family:var(--mono)}
-.co-tile-cnt{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--muted);background:rgba(255,255,255,.07);padding:1px 6px;border-radius:999px;flex-shrink:0}
+.co-tile.on{border-color:var(--co-color,var(--accent));background:rgba(var(--co-rgb,45,224,200),.1)}
+.co-tile-icon{font-size:15px;flex-shrink:0;width:22px;text-align:center}
+.co-tile-name{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.co-tile-cnt{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--muted);background:rgba(255,255,255,.07);padding:1px 5px;border-radius:999px;flex-shrink:0}
+.co-tile-arr{font-size:9px;color:var(--muted);transition:transform .2s;flex-shrink:0}
+.co-tile.on .co-tile-arr{transform:rotate(90deg)}
+/* Rozwinięte moduły pod firmą */
+.co-modules{display:none;padding:2px 0 4px 8px;border-left:2px solid rgba(255,255,255,.06);margin:1px 0 2px 18px}
+.co-modules.open{display:flex;flex-direction:column;gap:1px}
+.co-mod{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:11px;color:var(--muted);transition:all .12s;border-left:2px solid transparent}
+.co-mod:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.co-mod.on{color:var(--accent);border-left-color:var(--accent);background:rgba(45,224,200,.05)}
 </style>
 </head>
 <body>
@@ -152,34 +159,17 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <!-- Kafle firm -->
     <div class="co-tiles" id="co-tiles"></div>
     <!-- Akcje -->
-    <div class="tiles" style="border-bottom:0.5px solid var(--border);margin-bottom:6px">
-      <div class="tile tile-scan" id="nav-scan" onclick="goTab('scan')">
-        <div class="tile-icon">&#128247;</div>
-        <div class="tile-label">Skanuj<br>fakture</div>
+    <div style="display:flex;gap:5px;padding:5px 8px;border-bottom:0.5px solid var(--border);margin-bottom:4px">
+      <div id="nav-scan" onclick="goTab('scan')" style="flex:1;border-radius:7px;padding:7px 4px;text-align:center;cursor:pointer;background:rgba(45,224,200,.07);border:1px solid rgba(45,224,200,.2);transition:all .15s">
+        <div style="font-size:16px">&#128247;</div>
+        <div style="font-size:10px;font-weight:600;color:var(--accent);margin-top:2px">Skanuj</div>
       </div>
-      <div class="tile tile-import" id="nav-import" onclick="goTab('import')">
-        <div class="tile-icon">&#128229;</div>
-        <div class="tile-label">Import<br>XLSX/PDF</div>
+      <div id="nav-import" onclick="goTab('import')" style="flex:1;border-radius:7px;padding:7px 4px;text-align:center;cursor:pointer;background:rgba(96,168,240,.07);border:1px solid rgba(96,168,240,.2);transition:all .15s">
+        <div style="font-size:16px">&#128229;</div>
+        <div style="font-size:10px;font-weight:600;color:#60a8f0;margin-top:2px">Import</div>
       </div>
     </div>
-    <!-- Moduły -->
-    <div class="ni" id="nav-ledger" onclick="goTab('ledger')">&#8801; Ksiega</div>
-    <div class="tile-firms" id="nav-firms" onclick="goTab('firms')">
-      <div class="tile-firms-icon">&#128202;</div>
-      <div><div class="tile-firms-text">Obliczenia firm</div><div class="tile-firms-sub">Wyniki finansowe</div></div>
-    </div>
-    <div class="tile-firms" id="nav-vehicles" onclick="goTab('vehicles')" style="margin-top:6px;border-color:rgba(240,176,96,.2);background:rgba(240,176,96,.06)">
-      <div class="tile-firms-icon">&#128665;</div>
-      <div><div class="tile-firms-text" style="color:var(--amber)">Koszty per auto</div><div class="tile-firms-sub">Flota 9 pojazdow</div></div>
-    </div>
-    <div class="tile-firms" id="nav-fixed" onclick="goTab('fixed')" style="margin-top:6px;border-color:rgba(255,200,80,.3)">
-      <div class="tile-firms-icon">📌</div>
-      <div><div class="tile-firms-text" style="color:var(--amber)">Koszty stale</div><div class="tile-firms-sub">Stale + ubezpieczenia</div></div>
-    </div>
-    <div class="tile-firms" id="nav-office" onclick="goTab('office')" style="margin-top:6px;border-color:rgba(180,180,255,.3)">
-      <div class="tile-firms-icon">🏢</div>
-      <div><div class="tile-firms-text" style="color:#b4b4ff">Biuro</div><div class="tile-firms-sub">Koszty biurowe</div></div>
-    </div>
+    <!-- Moduły renderowane dynamicznie w accordion -->
   </nav>
   <main class="main">
     <div id="page-dash" style="display:none">
@@ -411,6 +401,16 @@ var CO_COLORS={
   vr:{color:'#c084fc',rgb:'192,132,252',icon:'&#128295;',name:'Vipremium Marcin Rogowski',short:'VMR'}
 };
 function renderTree(){renderCoTiles();}
+
+// Moduły dostępne per firma
+var CO_MODULES=[
+  {id:'ledger', label:'Księga',         icon:'≡'},
+  {id:'firms',  label:'Obliczenia',     icon:'📊'},
+  {id:'vehicles',label:'Koszty/auto',   icon:'🚛'},
+  {id:'fixed',  label:'Koszty stałe',   icon:'📌'},
+  {id:'office', label:'Biuro',          icon:'🏢'},
+];
+
 function renderCoTiles(){
   var order=['all','vt','pt','et','vr'];
   var h='';
@@ -418,15 +418,23 @@ function renderCoTiles(){
     var co=CO_COLORS[id];
     var cnt=invs.filter(function(i){return id==='all'||i.company===id;}).length;
     var isOn=selCo===id;
-    h+='<div class="co-tile'+(isOn?' on':'')+'" onclick="pickCo(\''+id+'\')" style="--co-color:'+co.color+';--co-rgb:'+co.rgb+'">';
+    var color=isOn?'color:'+co.color:'';
+    // Kafel firmy
+    h+='<div class="co-tile'+(isOn?' on':'')+'" onclick="pickCo(\''+id+'\',event)" style="--co-color:'+co.color+';--co-rgb:'+co.rgb+'">';
     h+='<div class="co-tile-icon">'+co.icon+'</div>';
-    h+='<div style="flex:1;min-width:0">';
-    h+='<div class="co-tile-name" style="'+(isOn?'color:'+co.color:'')+'">'+co.short+'</div>';
-    if(id!=='all'){h+='<div class="co-tile-short">'+co.name.slice(0,28)+(co.name.length>28?'…':'')+'</div>';}
-    else{h+='<div class="co-tile-short">Cała grupa &bull; '+invs.length+' fakt.</div>';}
+    h+='<div style="flex:1;min-width:0"><div class="co-tile-name" style="'+color+'">'+co.short+'</div></div>';
+    h+='<div class="co-tile-cnt">'+cnt+'</div>';
+    if(id!=='all'){h+='<span class="co-tile-arr">&#9654;</span>';}
     h+='</div>';
-    if(id!=='all'){h+='<div class="co-tile-cnt">'+cnt+'</div>';}
-    h+='</div>';
+    // Rozwijane moduły - tylko dla firm (nie "wszystkie")
+    if(id!=='all'){
+      h+='<div class="co-modules'+(isOn?' open':'')+'" id="mods-'+id+'">';
+      CO_MODULES.forEach(function(mod){
+        var isModOn=curTab===mod.id;
+        h+='<div class="co-mod'+(isModOn?' on':'')+'" onclick="goTab(\''+mod.id+'\')">'+mod.icon+' '+mod.label+'</div>';
+      });
+      h+='</div>';
+    }
   });
   var el=document.getElementById('co-tiles');if(el)el.innerHTML=h;
   // Dashboard active state
@@ -437,12 +445,21 @@ function renderCoTiles(){
     dashEl.style.borderColor=isDash?'rgba(45,224,200,.4)':'transparent';
   }
 }
-function pickCo(id){
+
+function pickCo(id,event){
+  var prev=selCo;
   selCo=id;selMonth=null;sel={};selVeh=null;selFirmCat=null;selLedgerCat=null;ledgerSearch='';
   renderCoTiles();
-  // Jesli jestesmy na dashboard i wybieramy firme -> przejdz do firm
-  if(curTab==='dash'&&id!=='all'){goTab('firms');}
-  else{renderCur();}
+  if(id==='all'){
+    // Wszystkie -> dashboard
+    goTab('dash');
+  } else if(prev===id&&curTab!=='dash'){
+    // Klik w tę samą firmę - zostań gdzie jesteś
+    renderCur();
+  } else {
+    // Nowa firma - przejdź do Obliczeń
+    goTab('firms');
+  }
 }
 
 // tgCo/tgYr/goMonth replaced by pickCo
@@ -462,6 +479,9 @@ function goTab(t){
   renderCoTiles();
   if(vehEl){vehEl.className='tile-firms'+(t==='vehicles'?' on':'');vehEl.style.borderColor=t==='vehicles'?'var(--amber)':'rgba(240,176,96,.2)';vehEl.style.background=t==='vehicles'?'rgba(240,176,96,.15)':'rgba(240,176,96,.06)';}
   renderCur();
+  // Odśwież aktywny moduł w accordion
+  var _ct=document.getElementById('co-tiles');
+  if(_ct){_ct.querySelectorAll('.co-mod').forEach(function(el){var oc=el.getAttribute('onclick')||'';el.className='co-mod'+(oc.indexOf("'"+t+"'")>=0?' on':'');});}
 }
 function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();if(curTab==='fixed')renderFixed();if(curTab==='office')renderOffice();}
 
@@ -1611,6 +1631,10 @@ function renderDash(){
 
   var vatForecast=userRole==='owner'?renderVATForecast():'';
   var foreignVatHtml=userRole==='owner'?renderForeignVAT():'';
+  if(!invs.length){
+    g('dash-content').innerHTML='<div style="text-align:center;padding:3rem;color:var(--muted)"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:16px;font-weight:600;color:var(--amber);margin-bottom:8px">Brak połączenia z bazą danych</div><div style="font-size:13px">Sprawdź status serwera na Render.<br>Baza PostgreSQL nie odpowiada (ECONNREFUSED).<br><br><button class="prim" onclick="loadInvs()">↻ Odśwież</button></div></div>';
+    return;
+  }
   g('dash-content').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+foreignVatHtml+vatForecast;
   if(typeof Chart==='undefined')return;
   cos.forEach(function(c){

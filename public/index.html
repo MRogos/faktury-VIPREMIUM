@@ -356,6 +356,7 @@ function toggleLedgerSec(key){
 }
 function setLedgerCat(v){selLedgerCat=(v==='__null__')?null:v;renderLedger();}
 function pickTile(k){selLedgerCat=(selLedgerCat===k)?null:k;sel={};renderLedger();}
+function pickCostCat(c){selLedgerCat=c;sel={};renderLedger();}
 var ledgerDateFrom='';
 var ledgerDateTo='';
 var ledgerSortBy='date'; // 'date' | 'due' | 'amount'
@@ -536,18 +537,18 @@ function renderLedger(){
   var costs=sortInvs(base.filter(function(i){return i.type==='buy'&&!isOverdue(i);}));
   function sumL(a){return a.reduce(function(s,i){return s+(i.brutto||0);},0);}
   function plF(n){n=Math.abs(n);if(n===1)return 'faktura';var d=n%10,h=n%100;return (d>=2&&d<=4&&!(h>=12&&h<=14))?'faktury':'faktur';}
-  function tileH(key,icon,label,color,cnt,total){
-    var on=selLedgerCat===key;
+  function tileH(key,icon,label,color,cnt,total,on){
     return '<div onclick="pickTile(&quot;'+key+'&quot;)" style="flex:1;min-width:170px;cursor:pointer;background:'+(on?color:'#fff')+';border:2px solid '+color+';border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);transition:all .12s">'
       +'<div style="font-size:12px;font-weight:700;letter-spacing:.03em;color:'+(on?'#fff':color)+';display:flex;align-items:center;gap:6px;margin-bottom:8px">'+icon+' '+label+'</div>'
       +'<div style="font-family:var(--mono);font-size:19px;font-weight:700;color:'+(on?'#fff':'var(--text)')+'">'+fmt(total)+'</div>'
       +'<div style="font-size:11px;color:'+(on?'rgba(255,255,255,.85)':'var(--muted)')+';margin-top:2px">'+cnt+' '+plF(cnt)+(on?' &nbsp;·&nbsp; ▲ kliknij aby zwinąć':'')+'</div>'
       +'</div>';
   }
+  var costsActive=(selLedgerCat==='buy'||CATS.some(function(c){return c.id===selLedgerCat;}));
   var tilesHtml='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
-    +tileH('sale','📈','PRZYCHODY','#16a34a',sales.length,sumL(sales))
-    +tileH('buy','📉','KOSZTY','#f59e0b',costs.length,sumL(costs))
-    +tileH('overdue','⚠️','PRZETERMINOWANE','#ef4444',overdue.length,sumL(overdue))
+    +tileH('buy','📉','KOSZTY','#f59e0b',costs.length,sumL(costs),costsActive)
+    +tileH('sale','📈','PRZYCHODY','#16a34a',sales.length,sumL(sales),selLedgerCat==='sale')
+    +tileH('overdue','⚠️','PRZETERMINOWANE','#ef4444',overdue.length,sumL(overdue),selLedgerCat==='overdue')
     +'</div>';
 
   // === FILTRY ===
@@ -561,14 +562,6 @@ function renderLedger(){
       +'<option value="due"'+(ledgerSortBy==='due'?' selected':'')+'>Sortuj: termin</option>'
       +'<option value="amount"'+(ledgerSortBy==='amount'?' selected':'')+'>Sortuj: kwota</option>'
       +'</select>';
-    _lh+='</div>';
-    // Filtry podkategorii kosztów (kafle wyżej obsługują przychody/koszty/przeterminowane)
-    _lh+='<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center">';
-    _lh+='<span style="font-size:11px;color:var(--muted);margin-right:2px">Filtruj koszty:</span>';
-    CATS.forEach(function(cat){
-      var isOn=selLedgerCat===cat.id;
-      _lh+='<button class="sm'+(isOn?' prim':'')+'" onclick="pickTile(&quot;'+cat.id+'&quot;)">'+cat.icon+' '+cat.label+'</button>';
-    });
     _lh+='</div>';
         g('lfilters').innerHTML=_lh;
     var inp=document.getElementById('lsearch-input');
@@ -606,13 +599,26 @@ function renderLedger(){
   // Lista aktywnej kategorii — pełna szerokość (kafle są nad filtrami)
   var html='';
   var ac=selLedgerCat;
-  if(ac==='sale'){ html+= sales.length?buildTable(sales,'📈 PRZYCHODY','#16a34a',false):'<div class="empty">Brak przychodów w tym okresie</div>'; }
-  else if(ac==='buy'){ html+= costs.length?buildTable(costs,'📉 KOSZTY','#f59e0b',true):'<div class="empty">Brak kosztów w tym okresie</div>'; }
-  else if(ac==='overdue'){ html+= overdue.length?buildTable(overdue,'⚠️ PRZETERMINOWANE','#ef4444',true):'<div class="empty">Brak przeterminowanych 🎉</div>'; }
-  else if(ac){
-    var catList=sortInvs(base.filter(function(i){return i.type==='buy'&&i.costCat===ac;}));
-    var cat=CATS.find(function(x){return x.id===ac;})||{icon:'📦',label:'Koszty'};
-    html+= catList.length?buildTable(catList,cat.icon+' '+cat.label.toUpperCase(),'#f59e0b',true):'<div class="empty">Brak faktur w tej kategorii</div>';
+  var isCat=CATS.some(function(c){return c.id===ac;});
+  if(ac==='sale'){
+    html+= sales.length?buildTable(sales,'📈 PRZYCHODY','#16a34a',false):'<div class="empty">Brak przychodów w tym okresie</div>';
+  } else if(ac==='overdue'){
+    html+= overdue.length?buildTable(overdue,'⚠️ PRZETERMINOWANE','#ef4444',true):'<div class="empty">Brak przeterminowanych 🎉</div>';
+  } else if(ac==='buy'||isCat){
+    // Podział na podkategorie dopiero tutaj — pod kaflem KOSZTY
+    html+='<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:12px">';
+    html+='<span style="font-size:11px;color:var(--muted);margin-right:2px">Podkategoria:</span>';
+    html+='<button class="sm'+(ac==='buy'?' prim':'')+'" onclick="pickCostCat(&quot;buy&quot;)">Wszystkie ('+costs.length+')</button>';
+    CATS.forEach(function(c){
+      var n=costs.filter(function(i){return (i.costCat||'other')===c.id;}).length;
+      if(!n)return;
+      html+='<button class="sm'+(ac===c.id?' prim':'')+'" onclick="pickCostCat(&quot;'+c.id+'&quot;)">'+c.icon+' '+c.label+' ('+n+')</button>';
+    });
+    html+='</div>';
+    var list=(ac==='buy')?costs:sortInvs(costs.filter(function(i){return (i.costCat||'other')===ac;}));
+    var cat=isCat?(CATS.find(function(x){return x.id===ac;})||{icon:'📉',label:'Koszty'}):{icon:'📉',label:'Koszty'};
+    var title=(ac==='buy')?'📉 KOSZTY':(cat.icon+' '+cat.label.toUpperCase());
+    html+= list.length?buildTable(list,title,'#f59e0b',true):'<div class="empty">Brak faktur w tej podkategorii</div>';
   } else {
     html+='<div style="text-align:center;color:var(--muted);padding:36px 16px;font-size:13px">Kliknij kafelek powyżej, aby rozwinąć faktury na całą stronę</div>';
   }
@@ -738,11 +744,8 @@ function buildTable(rows,title,color,isCosts,secKey,defOpen){
     h+='</div>';
     h+='</div>';
 
-    // Attachment preview row
-    h+='<div id="prev-row-'+i.id+'" style="display:none;border-bottom:1px solid var(--border)">';
-    h+='<div style="padding:12px 16px;background:var(--bg3)">';
-    h+='<iframe id="prev-frame-'+i.id+'" src="" style="width:100%;height:600px;border-radius:6px;border:1px solid var(--border);background:white"></iframe>';
-    h+='</div></div>';
+    // Attachment preview row (iframe tworzony leniwie przy kliknięciu — bez tego lag przy setkach kart)
+    h+='<div id="prev-row-'+i.id+'" style="display:none;border-bottom:1px solid var(--border)"></div>';
   });
   h+='</div>';
   }
@@ -1846,20 +1849,17 @@ function uploadAttachment(id,input){
 function openAttachment(id){toggleAttachPreview(id);}
 function toggleAttachPreview(id){
   var row=document.getElementById('prev-row-'+id);
-  var frame=document.getElementById('prev-frame-'+id);
   if(!row)return;
-  if(row.style.display!=='none'){row.style.display='none';if(frame)frame.src='';return;}
-  document.querySelectorAll('[id^="prev-row-"]').forEach(function(r){
-    r.style.display='none';
-    var f=document.getElementById('prev-frame-'+r.id.slice(9));
-    if(f)f.src='';
-  });
+  if(row.style.display!=='none'){row.style.display='none';row.innerHTML='';return;}
+  document.querySelectorAll('[id^="prev-row-"]').forEach(function(r){r.style.display='none';r.innerHTML='';});
+  row.style.display='';
+  row.innerHTML='<div style="padding:12px 16px;background:var(--bg3);color:var(--muted);font-size:12px">Ładowanie załącznika…</div>';
   fetch('/api/invoices/'+id+'/attachment',{headers:{'x-auth-token':tok()}})
   .then(function(r){return r.json();}).then(function(d){
-    if(!d.url){alert('Brak zalacznika');return;}
-    row.style.display='';frame.src=d.url;
-    row.scrollIntoView({behavior:'smooth',block:'nearest'});
-  }).catch(function(e){alert('Blad: '+e.message);});
+    if(!d.url){row.innerHTML='<div style="padding:12px 16px;color:var(--muted);font-size:12px">Brak załącznika</div>';return;}
+    row.innerHTML='<div style="padding:12px 16px;background:var(--bg3)"><iframe src="'+d.url+'" style="width:100%;height:600px;border-radius:6px;border:1px solid var(--border);background:white"></iframe></div>';
+    try{row.scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){}
+  }).catch(function(e){row.innerHTML='<div style="padding:12px 16px;color:#dc2626;font-size:12px">Błąd: '+e.message+'</div>';});
 }
 function deleteAttachment(id){
   if(!confirm('Usunac zalacznik?'))return;

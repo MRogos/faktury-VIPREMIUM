@@ -684,7 +684,7 @@ function buildTable(rows,title,color,isCosts){
 
     var _iidx='_'+i.id.replace(/[^a-z0-9]/gi,'_');
     window._invIds[_iidx]=i.id;
-    h+='<div style="'+borderLeft+'background:'+selBg+';padding:10px 16px;border-bottom:1px solid var(--border);transition:background .1s;display:flex;align-items:center;gap:10px" '
+    h+='<div style="'+borderLeft+'background:'+selBg+';padding:10px 16px;border-bottom:1px solid var(--border);transition:background .1s;display:flex;align-items:center;gap:10px;'+(i.attachmentUrl?'cursor:pointer':'')+'" '
       +'onclick="onCardClick(event,this)" data-id="'+i.id+'">';
 
     // Checkbox
@@ -698,6 +698,7 @@ function buildTable(rows,title,color,isCosts){
     h+='<div style="flex:1;min-width:0">';
     h+='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">';
     h+='<span style="font-weight:700;font-size:13px;color:var(--text)">'+(i.num||'—')+'</span>';
+    if(i.attachmentUrl){h+='<span title="Kliknij fakturę aby zobaczyć załącznik" style="font-size:11px;color:#2563eb">📎</span>';}
     h+='<span style="font-size:11px;color:var(--muted)">'+(co?co.short:'')+'</span>';
     h+='<span style="font-size:11px;color:var(--muted)">'+( i.date||'')+'</span>';
     if(i.type==='buy'&&_cat){h+='<span style="font-size:10px;background:var(--bg3);border:1px solid var(--border);padding:1px 6px;border-radius:999px;color:var(--muted)">'+_cat.label+'</span>';}
@@ -733,9 +734,7 @@ function buildTable(rows,title,color,isCosts){
     // Akcje
     h+='<div style="display:flex;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">';
     h+='<button onclick="openEdit(window._invIds.'+_iidx+')" style="padding:3px 8px;font-size:11px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;color:#374151">Edytuj</button>';
-    if(i.attachmentUrl){
-      h+='<button onclick="openAttachment(window._invIds.'+_iidx+')" style="padding:3px 8px;font-size:11px;border:1px solid #bfdbfe;border-radius:6px;background:#eff6ff;cursor:pointer;color:#2563eb">Zał.</button>';
-    } else {
+    if(!i.attachmentUrl){
       h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="(function(f){uploadAttachment(window._invIds.'+_iidx+',f)})(this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;color:#6b7280">+Zał.</span></label>';
     }
     h+='<button onclick="delInv(window._invIds.'+_iidx+')" style="padding:3px 8px;font-size:11px;border:1px solid #fca5a5;border-radius:6px;background:#fef2f2;cursor:pointer;color:#dc2626">Usuń</button>';
@@ -1851,7 +1850,7 @@ function toggleAttachPreview(id){
   var frame=document.getElementById('prev-frame-'+id);
   if(!row)return;
   if(row.style.display!=='none'){row.style.display='none';if(frame)frame.src='';return;}
-  document.querySelectorAll('tr[id^="prev-row-"]').forEach(function(r){
+  document.querySelectorAll('[id^="prev-row-"]').forEach(function(r){
     r.style.display='none';
     var f=document.getElementById('prev-frame-'+r.id.slice(9));
     if(f)f.src='';
@@ -2467,7 +2466,9 @@ function markUnpaid_modal(){
 
 function onCardClick(e,el){
   var id=el?el.getAttribute('data-id'):null;
-  // Klik na kartę - nic specjalnego (akcje mają własne handlery)
+  if(!id)return;
+  var inv=invs.find(function(x){return x.id===id;});
+  if(inv&&inv.attachmentUrl){toggleAttachPreview(id);}
 }
 
 window.onload=function(){

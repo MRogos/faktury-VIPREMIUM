@@ -355,6 +355,7 @@ function toggleLedgerSec(key){
   renderLedger();
 }
 function setLedgerCat(v){selLedgerCat=(v==='__null__')?null:v;renderLedger();}
+function pickTile(k){selLedgerCat=(selLedgerCat===k)?null:k;sel={};renderLedger();}
 var ledgerDateFrom='';
 var ledgerDateTo='';
 var ledgerSortBy='date'; // 'date' | 'due' | 'amount'
@@ -528,9 +529,30 @@ function renderLedger(){
 
   var prefix=selYear+(selMonth?'-'+selMonth:'');
 
+  // Dane bazowe (bez filtra kategorii) — do kafli i listy
+  var base=baseFilter(invs);
+  var overdue=sortInvs(base.filter(function(i){return i.type==='buy'&&isOverdue(i);}));
+  var sales=sortInvs(base.filter(function(i){return i.type==='sale';}));
+  var costs=sortInvs(base.filter(function(i){return i.type==='buy'&&!isOverdue(i);}));
+  function sumL(a){return a.reduce(function(s,i){return s+(i.brutto||0);},0);}
+  function plF(n){n=Math.abs(n);if(n===1)return 'faktura';var d=n%10,h=n%100;return (d>=2&&d<=4&&!(h>=12&&h<=14))?'faktury':'faktur';}
+  function tileH(key,icon,label,color,cnt,total){
+    var on=selLedgerCat===key;
+    return '<div onclick="pickTile(&quot;'+key+'&quot;)" style="flex:1;min-width:170px;cursor:pointer;background:'+(on?color:'#fff')+';border:2px solid '+color+';border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);transition:all .12s">'
+      +'<div style="font-size:12px;font-weight:700;letter-spacing:.03em;color:'+(on?'#fff':color)+';display:flex;align-items:center;gap:6px;margin-bottom:8px">'+icon+' '+label+'</div>'
+      +'<div style="font-family:var(--mono);font-size:19px;font-weight:700;color:'+(on?'#fff':'var(--text)')+'">'+fmt(total)+'</div>'
+      +'<div style="font-size:11px;color:'+(on?'rgba(255,255,255,.85)':'var(--muted)')+';margin-top:2px">'+cnt+' '+plF(cnt)+(on?' &nbsp;·&nbsp; ▲ kliknij aby zwinąć':'')+'</div>'
+      +'</div>';
+  }
+  var tilesHtml='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
+    +tileH('sale','📈','PRZYCHODY','#16a34a',sales.length,sumL(sales))
+    +tileH('buy','📉','KOSZTY','#f59e0b',costs.length,sumL(costs))
+    +tileH('overdue','⚠️','PRZETERMINOWANE','#ef4444',overdue.length,sumL(overdue))
+    +'</div>';
+
   // === FILTRY ===
   if(g('lfilters')){
-    var _lh='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">';
+    var _lh=tilesHtml+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">';
     _lh+='<input id="lsearch-input" type="text" placeholder="🔍 Szukaj: numer, kontrahent..." value="'+ledgerSearch.replace(/"/g,'&quot;')+'" oninput="ledgerSearch=this.value;renderLedger()" style="flex:1;min-width:180px;padding:7px 12px;background:#fff;border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
     _lh+='<input type="date" placeholder="Od" value="'+ledgerDateFrom+'" onchange="ledgerDateFrom=this.value;renderLedger()" style="padding:6px 10px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);background:#fff">';
     _lh+='<input type="date" placeholder="Do" value="'+ledgerDateTo+'" onchange="ledgerDateTo=this.value;renderLedger()" style="padding:6px 10px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);background:#fff">';
@@ -540,19 +562,12 @@ function renderLedger(){
       +'<option value="amount"'+(ledgerSortBy==='amount'?' selected':'')+'>Sortuj: kwota</option>'
       +'</select>';
     _lh+='</div>';
-    // Filtry kategorii - użyj data-val zamiast inline apostrofów
+    // Filtry podkategorii kosztów (kafle wyżej obsługują przychody/koszty/przeterminowane)
     _lh+='<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center">';
-    var catBtns=[
-      {val:null,label:'Wszystkie',icon:''},
-      {val:'sale',label:'Przychody',icon:'📈'},
-      {val:'buy',label:'Koszty',icon:'📉'},
-      {val:'overdue',label:'Przeterminowane',icon:'⚠',style:'color:#dc2626;border-color:#dc2626'}
-    ];
-    CATS.forEach(function(cat){catBtns.push({val:cat.id,label:cat.label,icon:cat.icon});});
-    catBtns.forEach(function(b){
-      var isOn=selLedgerCat===b.val;
-      var catVal=(b.val===null)?'__null__':b.val;
-      _lh+='<button class="sm'+(isOn?' prim':'')+'"'+(b.style&&!isOn?' style="'+b.style+'"':'')+' onclick="setLedgerCat('+JSON.stringify(catVal)+')">'+b.icon+(b.icon?' ':'')+b.label+'</button>';
+    _lh+='<span style="font-size:11px;color:var(--muted);margin-right:2px">Filtruj koszty:</span>';
+    CATS.forEach(function(cat){
+      var isOn=selLedgerCat===cat.id;
+      _lh+='<button class="sm'+(isOn?' prim':'')+'" onclick="pickTile(&quot;'+cat.id+'&quot;)">'+cat.icon+' '+cat.label+'</button>';
     });
     _lh+='</div>';
         g('lfilters').innerHTML=_lh;
@@ -560,21 +575,17 @@ function renderLedger(){
     if(inp&&document.activeElement!==inp&&ledgerSearch){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
   }
 
-  function applyFilters(list){
+  function baseFilter(list){
     return list.filter(function(i){
       if(selCo!=='all'&&i.company!==selCo)return false;
       if(selYear&&(!i.date||i.date.indexOf(prefix)!==0))return false;
       if(ledgerDateFrom&&i.date&&i.date<ledgerDateFrom)return false;
       if(ledgerDateTo&&i.date&&i.date>ledgerDateTo)return false;
-      if(selLedgerCat==='sale')return i.type==='sale';
-      if(selLedgerCat==='buy')return i.type==='buy';
-      if(selLedgerCat==='overdue')return i.type==='buy'&&isOverdue(i);
-      if(selLedgerCat)return i.type==='buy'&&i.costCat===selLedgerCat;
       if(ledgerSearch){
         var q=ledgerSearch.toLowerCase();
-        return (i.num||'').toLowerCase().indexOf(q)>=0
+        if(!((i.num||'').toLowerCase().indexOf(q)>=0
           ||(i.contractor||'').toLowerCase().indexOf(q)>=0
-          ||(i.description||'').toLowerCase().indexOf(q)>=0;
+          ||(i.description||'').toLowerCase().indexOf(q)>=0))return false;
       }
       return true;
     });
@@ -592,27 +603,18 @@ function renderLedger(){
     });
   }
 
-  var filtered=applyFilters(invs);
-  if(!filtered.length){
-    g('ltable').innerHTML='<div class="empty">Brak faktur dla wybranych filtrów</div>';
-    return;
-  }
-
-  var overdue=filtered.filter(function(i){return i.type==='buy'&&isOverdue(i);});
-  var sales=sortInvs(filtered.filter(function(i){return i.type==='sale';}));
-  var costs=sortInvs(filtered.filter(function(i){return i.type==='buy'&&!isOverdue(i);}));
-
+  // Lista aktywnej kategorii — pełna szerokość (kafle są nad filtrami)
   var html='';
-
-  // 3 zwijane kafelki: Przeterminowane / Przychody / Koszty
-  if(overdue.length&&selLedgerCat!=='sale'){
-    html+=buildTable(sortInvs(overdue),'⚠️ PRZETERMINOWANE','#ef4444',true,'overdue',true);
-  }
-  if(sales.length&&selLedgerCat!=='buy'&&selLedgerCat!=='overdue'){
-    html+=buildTable(sales,'📈 PRZYCHODY','#16a34a',false,'sales',false);
-  }
-  if(costs.length&&selLedgerCat!=='sale'&&selLedgerCat!=='overdue'){
-    html+=buildTable(costs,'📉 KOSZTY','#ef4444',true,'costs',false);
+  var ac=selLedgerCat;
+  if(ac==='sale'){ html+= sales.length?buildTable(sales,'📈 PRZYCHODY','#16a34a',false):'<div class="empty">Brak przychodów w tym okresie</div>'; }
+  else if(ac==='buy'){ html+= costs.length?buildTable(costs,'📉 KOSZTY','#f59e0b',true):'<div class="empty">Brak kosztów w tym okresie</div>'; }
+  else if(ac==='overdue'){ html+= overdue.length?buildTable(overdue,'⚠️ PRZETERMINOWANE','#ef4444',true):'<div class="empty">Brak przeterminowanych 🎉</div>'; }
+  else if(ac){
+    var catList=sortInvs(base.filter(function(i){return i.type==='buy'&&i.costCat===ac;}));
+    var cat=CATS.find(function(x){return x.id===ac;})||{icon:'📦',label:'Koszty'};
+    html+= catList.length?buildTable(catList,cat.icon+' '+cat.label.toUpperCase(),'#f59e0b',true):'<div class="empty">Brak faktur w tej kategorii</div>';
+  } else {
+    html+='<div style="text-align:center;color:var(--muted);padding:36px 16px;font-size:13px">Kliknij kafelek powyżej, aby rozwinąć faktury na całą stronę</div>';
   }
 
   g('ltable').innerHTML=html;

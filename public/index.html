@@ -347,12 +347,19 @@ function toggleDashVeh(){expF.dashVehOpen=!expF.dashVehOpen;renderDash();}
 function setDashVehMonth(v){expF.dashVehMonth=v;expF.dashVehOpen=true;renderDash();}
 function setVehTab(btn){window._vehTab=btn.getAttribute('data-vtab');renderVehicles();}
 function toggleOverdue(){expF.overdue=!expF.overdue;renderLedger();}
+function toggleLedgerSec(key){
+  var defs={overdue:true,sales:false,costs:false};
+  var def=defs[key]!==undefined?defs[key]:true;
+  var open=expF[key]===undefined?def:expF[key]!==false;
+  expF[key]=!open;
+  renderLedger();
+}
 function setLedgerCat(v){selLedgerCat=(v==='__null__')?null:v;renderLedger();}
 var ledgerDateFrom='';
 var ledgerDateTo='';
 var ledgerSortBy='date'; // 'date' | 'due' | 'amount'
 var _imp=[];
-var _salesIds=[],_costsIds=[];
+var _salesIds=[],_costsIds=[],_overdueIds=[];
 
 function fmt(n){return new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(+n||0);}
 function calcN(b,v){return b/(1+v/100);}
@@ -597,61 +604,49 @@ function renderLedger(){
 
   var html='';
 
-  // Sekcja przeterminowanych (zwijana)
+  // 3 zwijane kafelki: Przeterminowane / Przychody / Koszty
   if(overdue.length&&selLedgerCat!=='sale'){
-    var isExpOv=expF['overdue']!==false;
-    var totalOv=overdue.reduce(function(a,i){return a+i.brutto;},0);
-    html+='<div style="background:#fff;border:2px solid #ef4444;border-radius:var(--radius);margin-bottom:16px;overflow:hidden;box-shadow:0 2px 8px rgba(239,68,68,.15)">';
-    html+='<div style="padding:10px 16px;background:rgba(239,68,68,.06);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleOverdue()">';
-    html+='<span style="color:#dc2626;font-weight:700;font-size:13px">⚠️ Przeterminowane ('+overdue.length+')</span>';
-    html+='<div style="display:flex;align-items:center;gap:12px">';
-    html+='<span style="font-weight:700;color:#dc2626;font-family:var(--mono)">'+fmt(totalOv)+'</span>';
-    html+='<span style="color:#dc2626;font-size:12px">'+(isExpOv?'▲ Zwiń':'▼ Rozwiń')+'</span>';
-    html+='</div></div>';
-    if(isExpOv){
-      html+=buildTable(sortInvs(overdue),'','#ef4444',true).replace(/<div style="background:#fff[^>]*>/,'<div>').replace(/<div style="padding:10px 16px[^<]*<\/div>/,'');
-    }
-    html+='</div>';
+    html+=buildTable(sortInvs(overdue),'⚠️ PRZETERMINOWANE','#ef4444',true,'overdue',true);
   }
-
-  // Przychody i koszty jako osobne sekcje
-  if(selLedgerCat!=='buy'&&selLedgerCat!=='overdue'&&sales.length){
-    html+=buildTable(sales,'📈 PRZYCHODY','#16a34a',false);
+  if(sales.length&&selLedgerCat!=='buy'&&selLedgerCat!=='overdue'){
+    html+=buildTable(sales,'📈 PRZYCHODY','#16a34a',false,'sales',false);
   }
-  if(selLedgerCat!=='sale'&&(costs.length||!overdue.length)){
-    var costsToShow=selLedgerCat==='overdue'?[]:costs;
-    if(costsToShow.length){html+=buildTable(costsToShow,'📉 KOSZTY','#ef4444',true);}
+  if(costs.length&&selLedgerCat!=='sale'&&selLedgerCat!=='overdue'){
+    html+=buildTable(costs,'📉 KOSZTY','#ef4444',true,'costs',false);
   }
 
   g('ltable').innerHTML=html;
 }
 
-function buildTable(rows,title,color,isCosts){
-  if(!rows.length){
-    return '<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow)">'
-      +'<div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg3);display:flex;justify-content:space-between;align-items:center">'
-      +'<span style="color:'+color+';font-weight:700;font-size:13px">'+title+' (0)</span></div>'
-      +'<div class="empty" style="padding:1.5rem">Brak pozycji</div></div>';
-  }
+function buildTable(rows,title,color,isCosts,secKey,defOpen){
+  if(!rows.length)return '';
+  var total=rows.reduce(function(a,i){return a+(i.brutto||0);},0);
+  var collaps=!!secKey;
+  var isOpen=collaps?(expF[secKey]===undefined?(defOpen!==false):expF[secKey]!==false):true;
+  var strong=secKey==='overdue';
   var ids=rows.map(function(i){return i.id;});
-  if(isCosts)_costsIds=ids;else _salesIds=ids;
+  if(secKey==='overdue')_overdueIds=ids;else if(isCosts)_costsIds=ids;else _salesIds=ids;
   var selIds=ids.filter(function(id){return sel[id];});
-  var allSel=ids.length>0&&ids.every(function(id){return sel[id];});
-  var varName=isCosts?'_costsIds':'_salesIds';
+  var varName=secKey==='overdue'?'_overdueIds':(isCosts?'_costsIds':'_salesIds');
 
-  var h='<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow)">';
-  // Header
-  h+='<div style="padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg3);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+  var h='<div style="background:#fff;border:'+(strong?'2px solid #ef4444':'1px solid var(--border)')+';border-radius:var(--radius);margin-bottom:16px;overflow:hidden;box-shadow:'+(strong?'0 2px 8px rgba(239,68,68,.15)':'var(--shadow)')+'">';
+  // Header (klik = zwijanie)
+  h+='<div'+(collaps?' onclick="toggleLedgerSec(&quot;'+secKey+'&quot;)"':'')+' style="padding:10px 16px;'+(isOpen?'border-bottom:1px solid var(--border);':'')+'background:'+(strong?'rgba(239,68,68,.06)':'var(--bg3)')+';display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px'+(collaps?';cursor:pointer':'')+'">';
   h+='<span style="color:'+color+';font-weight:700;font-size:13px">'+title+' <span style="opacity:.5;font-size:12px;font-weight:400">('+rows.length+')</span></span>';
-  h+='<div style="display:flex;gap:8px;align-items:center">';
-  h+='<button class="sm" onclick="selAll(true,'+varName+')" style="font-size:11px">&#9745; Zaznacz</button>';
-  if(selIds.length>0){
-    if(isCosts){h+='<button class="sm prim" onclick="markSelPaid()" style="font-size:11px">&#10003; Oznacz opłacone</button>';}
-    h+='<button class="sm del" onclick="delSel()" style="font-size:11px">&#128465; Usuń ('+selIds.length+')</button>';
-    h+='<button class="sm" onclick="sel={};renderLedger()" style="font-size:11px">&#10005;</button>';
+  h+='<div style="display:flex;gap:8px;align-items:center" onclick="event.stopPropagation()">';
+  if(isOpen){
+    h+='<button class="sm" onclick="selAll(true,'+varName+')" style="font-size:11px">&#9745; Zaznacz</button>';
+    if(selIds.length>0){
+      if(isCosts){h+='<button class="sm prim" onclick="markSelPaid()" style="font-size:11px">&#10003; Oznacz opłacone</button>';}
+      h+='<button class="sm del" onclick="delSel()" style="font-size:11px">&#128465; Usuń ('+selIds.length+')</button>';
+      h+='<button class="sm" onclick="sel={};renderLedger()" style="font-size:11px">&#10005;</button>';
+    }
   }
+  h+='<span style="font-weight:700;color:'+color+';font-family:var(--mono);font-size:13px">'+fmt(total)+'</span>';
+  if(collaps){h+='<span style="color:'+color+';font-size:12px">'+(isOpen?'▲':'▼')+'</span>';}
   h+='</div></div>';
 
+  if(isOpen){
   // Karty faktur
   h+='<div style="display:flex;flex-direction:column;gap:0">';
   window._invIds=window._invIds||{};
@@ -747,7 +742,9 @@ function buildTable(rows,title,color,isCosts){
     h+='<iframe id="prev-frame-'+i.id+'" src="" style="width:100%;height:600px;border-radius:6px;border:1px solid var(--border);background:white"></iframe>';
     h+='</div></div>';
   });
-  h+='</div></div>';
+  h+='</div>';
+  }
+  h+='</div>';
   return h;
 }
 

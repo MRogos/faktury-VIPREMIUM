@@ -534,7 +534,7 @@ function renderLedger(){
   var base=baseFilter(invs);
   var overdue=sortInvs(base.filter(function(i){return i.type==='buy'&&isOverdue(i);}));
   var sales=sortInvs(base.filter(function(i){return i.type==='sale';}));
-  var costs=sortInvs(base.filter(function(i){return i.type==='buy'&&!isOverdue(i);}));
+  var costs=sortInvs(base.filter(function(i){return i.type==='buy';}));
   function sumL(a){return a.reduce(function(s,i){return s+(i.brutto||0);},0);}
   function plF(n){n=Math.abs(n);if(n===1)return 'faktura';var d=n%10,h=n%100;return (d>=2&&d<=4&&!(h>=12&&h<=14))?'faktury':'faktur';}
   function tileH(key,icon,label,color,cnt,total,on){

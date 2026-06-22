@@ -554,7 +554,23 @@ function renderLedger(){
 
   // === FILTRY ===
   if(g('lfilters')){
-    var _lh=tilesHtml+'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">';
+    var _lh=tilesHtml;
+    // OKRES — wybór miesiąca/roku bezpośrednio w Księdze
+    var _MNS=['Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paz','Lis','Gru'];
+    _lh+='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+    var _years=[];invs.forEach(function(i){if(i.date){var y=i.date.slice(0,4);if(y&&_years.indexOf(y)<0)_years.push(y);}});_years.sort();
+    if(_years.length>1){
+      _lh+='<select onchange="selYear=this.value;selMonth=\'\';renderLedger()" style="padding:5px 8px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px;background:#fff;color:var(--text);margin-right:4px">'+_years.map(function(y){return '<option value="'+y+'"'+(selYear===y?' selected':'')+'>'+y+'</option>';}).join('')+'</select>';
+    }
+    _lh+='<button class="sm'+(selMonth?'':' prim')+'" onclick="selMonth=\'\';renderLedger()">Cały rok</button>';
+    MONTHS.forEach(function(m,idx){
+      var pfx=selYear+'-'+m;
+      var has=invs.some(function(i){return (selCo==='all'||i.company===selCo)&&i.date&&i.date.indexOf(pfx)===0;});
+      if(!has)return;
+      _lh+='<button class="sm'+(selMonth===m?' prim':'')+'" onclick="selMonth=\''+m+'\';renderLedger()">'+_MNS[idx]+'</button>';
+    });
+    _lh+='</div>';
+    _lh+='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">';
     _lh+='<input id="lsearch-input" type="text" placeholder="🔍 Szukaj: numer, kontrahent..." value="'+ledgerSearch.replace(/"/g,'&quot;')+'" oninput="ledgerSearch=this.value;renderLedger()" style="flex:1;min-width:180px;padding:7px 12px;background:#fff;border:1.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px">';
     _lh+='<input type="date" placeholder="Od" value="'+ledgerDateFrom+'" onchange="ledgerDateFrom=this.value;renderLedger()" style="padding:6px 10px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);background:#fff">';
     _lh+='<input type="date" placeholder="Do" value="'+ledgerDateTo+'" onchange="ledgerDateTo=this.value;renderLedger()" style="padding:6px 10px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text);background:#fff">';

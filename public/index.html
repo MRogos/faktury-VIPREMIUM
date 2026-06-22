@@ -97,6 +97,7 @@ tr:hover td{background:rgba(0,0,0,.02)}
 .nbpb{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.8;color:#92400e}
 .empty{text-align:center;padding:2.5rem;color:var(--muted);font-size:13px}
 .chk{width:14px;height:14px;cursor:pointer;accent-color:var(--red)}
+.fg input[type=checkbox],.fg input[type=radio]{width:auto;padding:0;border:none;border-radius:0;accent-color:var(--accent)}
 .chk-paid{width:14px;height:14px;cursor:pointer;accent-color:var(--accent)}
 /* Tiles */
 .tiles{padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;border-bottom:0.5px solid var(--border);margin-bottom:6px}
@@ -1881,7 +1882,7 @@ function openEdit(id){
   if(!m){m=document.createElement('div');m.id='edit-modal';document.body.appendChild(m);}
   m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
   var catOpts=CATS.map(function(ct){return '<option value="'+ct.id+'"'+(inv.costCat===ct.id?' selected':'')+'>'+ct.icon+' '+ct.label+'</option>';}).join('');
-  var vehOpts=FLEET.map(function(v){return '<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;font-size:12px"><input type="checkbox" value="'+v+'"'+(inv.vehicles&&inv.vehicles.indexOf(v)>=0?' checked':'')+'>'+v+'</label>';}).join('');
+  var vehOpts='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">'+FLEET.map(function(v){return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" value="'+v+'"'+(inv.vehicles&&inv.vehicles.indexOf(v)>=0?' checked':'')+' style="width:14px;height:14px;flex:0 0 auto;accent-color:var(--accent)">'+v+'</label>';}).join('')+'</div>';
   m.innerHTML='<div style="background:var(--bg1);border:0.5px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><div style="font-weight:700;font-size:16px">&#9998; Edycja faktury</div><button class="sm" onclick="closeEdit()">&#10005;</button></div>'
     +'<div class="g2" style="gap:10px;margin-bottom:10px">'

@@ -1798,6 +1798,7 @@ function renderDash(){
     var allInv=invs.filter(function(i){return i.company===c.id&&i.date&&i.date.indexOf(selYear)===0;});
     var chartMonths=[],chartInc=[],chartCosts=[];
     MONTHS.forEach(function(m,idx){
+      if(dm&&m!==dm)return;
       var pfx=selYear+'-'+m;
       var ms=allInv.filter(function(i){return i.type==='sale'&&i.date&&i.date.indexOf(pfx)===0;});
       var mb=allInv.filter(function(i){return i.type==='buy'&&i.date&&i.date.indexOf(pfx)===0;});

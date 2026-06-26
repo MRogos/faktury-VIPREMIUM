@@ -346,6 +346,7 @@ function setDelId(el){var t=el.dataset.id?el:(el.closest('[data-id]'));var id=t?
 function uploadAttachmentEl(input){var t=input.closest('[data-id]');var id=t?t.getAttribute('data-id'):null;if(id)uploadAttachment(id,input);}
 function toggleDashVeh(){expF.dashVehOpen=!expF.dashVehOpen;renderDash();}
 function setDashVehMonth(v){expF.dashVehMonth=v;expF.dashVehOpen=true;renderDash();}
+function setDashMonth(v){expF.dashMonth=v;renderDash();}
 function setVehTab(btn){window._vehTab=btn.getAttribute('data-vtab');renderVehicles();}
 function toggleOverdue(){expF.overdue=!expF.overdue;renderLedger();}
 function toggleLedgerSec(key){
@@ -1687,8 +1688,18 @@ function renderDash(){
     {id:'vr',name:'Vipremium Marcin Rogowski',short:'VMR'}
   ];
   var cards='';
+  var dm=expF.dashMonth||'';
+  var dashPfx=selYear+(dm?'-'+dm:'');
+  var dashMonthBar='<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:14px"><span style="font-size:11px;color:var(--muted);margin-right:4px">OKRES:</span>';
+  dashMonthBar+='<button class="sm'+(dm?'':' prim')+'" onclick="setDashMonth(\'\')">Cały rok</button>';
+  MONTHS.forEach(function(m,idx){
+    var has=invs.some(function(i){return i.date&&i.date.indexOf(selYear+'-'+m)===0;});
+    if(!has)return;
+    dashMonthBar+='<button class="sm'+(dm===m?' prim':'')+'" onclick="setDashMonth(\''+m+'\')">'+MNS[idx]+'</button>';
+  });
+  dashMonthBar+='</div>';
   cos.forEach(function(c){
-    var allInv=invs.filter(function(i){return i.company===c.id&&i.date&&i.date.indexOf(selYear)===0;});
+    var allInv=invs.filter(function(i){return i.company===c.id&&i.date&&i.date.indexOf(dashPfx)===0;});
     var s=allInv.filter(function(i){return i.type==='sale';});
     var b=allInv.filter(function(i){return i.type==='buy';});
     var gI=s.reduce(function(a,i){return a+i.brutto;},0);
@@ -1781,7 +1792,7 @@ function renderDash(){
     return;
   }
   var dashVehiclesHtml=renderDashVehicles();
-  g('dash-content').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+foreignVatHtml+vatForecast+dashVehiclesHtml;
+  g('dash-content').innerHTML=dashMonthBar+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+cards+'</div>'+consolidatedHtml+foreignVatHtml+vatForecast+dashVehiclesHtml;
   if(typeof Chart==='undefined')return;
   cos.forEach(function(c){
     var allInv=invs.filter(function(i){return i.company===c.id&&i.date&&i.date.indexOf(selYear)===0;});

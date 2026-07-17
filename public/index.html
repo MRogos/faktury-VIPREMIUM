@@ -244,7 +244,10 @@ tr:hover td{background:rgba(0,0,0,.02)}
       </div>
     </div>
     <div id="page-vehicles" style="display:none">
-      <h1>Koszty per auto</h1>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h1>Koszty per auto</h1>
+        <button class="prim" onclick="openFleet()" style="font-size:13px">🚚 Zarządzaj flotą</button>
+      </div>
       <p class="sub" id="vsub"></p>
       <div id="vfilters" style="margin-bottom:16px"></div>
       <div id="vcontent"></div>
@@ -317,6 +320,7 @@ function isInternalInv(inv){
   return OWN_COMPANIES.some(function(n){return con.indexOf(n)>=0;});
 }
 var FLEET=['DW7MP83','DW6RS03','DWLTA36','WPR8462U','WGM9808M','DSWTF32','DSR80719','DSR80682','DSR80874'];
+var FLEET_NOTES={};
 var PLATE_ALIASES={'DW1VT08':'DSR80719','DW1WN03':'DSR80874','DW5VX38':'DSR80682'};
 function normalizePlate(plate){var p=(plate||'').toUpperCase().replace(/\s/g,'');return PLATE_ALIASES[p]||p;}
 
@@ -389,7 +393,7 @@ function doLogin(){
       g('app').style.display='flex';
       expYr['all_'+selYear]=true;
       curTab='dash';
-      loadInvs();
+      loadFleet().then(loadInvs);
     } else {
       g('lerr').textContent='Bledne haslo.';
       g('lpass').value='';
@@ -403,6 +407,61 @@ function loadInvs(){
   .then(function(r){return r.json();})
   .then(function(d){invs=d;renderCoTiles();renderCur();})
   .catch(function(e){console.error(e);});
+}
+
+function loadFleet(){
+  return fetch('/api/fleet',{headers:{'x-auth-token':tok()}})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(Array.isArray(d)&&d.length){
+      FLEET.length=0;FLEET_NOTES={};
+      d.forEach(function(x){FLEET.push(x.plate);if(x.note)FLEET_NOTES[x.plate]=x.note;});
+    }
+  }).catch(function(){});
+}
+
+function openFleet(){
+  var m=g('fleet-modal');
+  if(!m){m=document.createElement('div');m.id='fleet-modal';document.body.appendChild(m);}
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  renderFleetModal();
+}
+function closeFleet(){var m=g('fleet-modal');if(m)m.style.display='none';}
+function renderFleetModal(){
+  var m=g('fleet-modal');if(!m)return;
+  var rows=FLEET.map(function(v){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg3);border-radius:8px">'
+      +'<span style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text)">'+v+(FLEET_NOTES[v]?' <span style="color:var(--muted);font-weight:400;font-size:11px;font-family:var(--font)">'+FLEET_NOTES[v]+'</span>':'')+'</span>'
+      +'<button onclick="removeVehicle(&quot;'+v+'&quot;)" style="border:1px solid #fecaca;background:#fef2f2;color:#dc2626;border-radius:6px;font-size:11px;padding:3px 9px;cursor:pointer">Usuń</button>'
+      +'</div>';
+  }).join('');
+  m.innerHTML='<div style="background:var(--bg1);border-radius:12px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-md)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div style="font-size:16px;font-weight:700;color:var(--text)">🚚 Zarządzaj flotą</div><button onclick="closeFleet()" style="border:none;background:var(--bg3);width:28px;height:28px;border-radius:8px;cursor:pointer;font-size:14px">✕</button></div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">'
+    +'<input id="fleet-new-plate" placeholder="Nr rej. (np. DMC26)" onkeydown="if(event.key===&quot;Enter&quot;)addVehicle()" style="flex:1;min-width:130px;padding:8px 11px;border:1.5px solid var(--border2);border-radius:8px;font-size:13px;text-transform:uppercase">'
+    +'<input id="fleet-new-note" placeholder="Opis (opcjonalnie)" onkeydown="if(event.key===&quot;Enter&quot;)addVehicle()" style="flex:1;min-width:130px;padding:8px 11px;border:1.5px solid var(--border2);border-radius:8px;font-size:13px">'
+    +'<button class="prim" onclick="addVehicle()" style="white-space:nowrap">＋ Dodaj</button>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Auta w systemie ('+FLEET.length+')</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px">'+(rows||'<div class="empty" style="padding:1rem">Brak aut</div>')+'</div>'
+    +'</div>';
+}
+function addVehicle(){
+  var pl=(g('fleet-new-plate').value||'').trim().toUpperCase().replace(/\s+/g,'');
+  var note=(g('fleet-new-note').value||'').trim();
+  if(!pl){alert('Podaj numer rejestracyjny');return;}
+  fetch('/api/fleet',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({plate:pl,note:note})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.error){alert(d.error);return;}
+    return loadFleet().then(function(){renderFleetModal();renderCoTiles();renderCur();});
+  }).catch(function(e){alert('Blad: '+e.message);});
+}
+function removeVehicle(plate){
+  if(!confirm('Usunąć '+plate+' z floty?\n(Historyczne koszty tego auta zostaną w fakturach.)'))return;
+  fetch('/api/fleet/'+encodeURIComponent(plate),{method:'DELETE',headers:{'x-auth-token':tok()}})
+  .then(function(r){return r.json();}).then(function(){
+    return loadFleet().then(function(){renderFleetModal();renderCoTiles();renderCur();});
+  }).catch(function(e){alert('Blad: '+e.message);});
 }
 
 function stats(coId){
@@ -2506,7 +2565,7 @@ window.onload=function(){
     g('app').style.display='flex';
     selCo='vt';
     applyRole();
-    loadInvs();
+    loadFleet().then(loadInvs);
   }
 };
 </script>

@@ -97,6 +97,24 @@ async function initDB() {
     for (const sql of migrations) {
       await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
     }
+    // Fleet (pojazdy) - zarzadzane z UI
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS fleet (
+        plate VARCHAR(20) PRIMARY KEY,
+        note VARCHAR(100),
+        active BOOLEAN DEFAULT TRUE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    const DEFAULT_FLEET = ['DW7MP83','DW6RS03','DWLTA36','WPR8462U','WGM9808M','DSWTF32','DSR80719','DSR80682','DSR80874'];
+    const fcnt = await pool.query('SELECT COUNT(*)::int AS n FROM fleet');
+    if (fcnt.rows[0].n === 0) {
+      for (let i = 0; i < DEFAULT_FLEET.length; i++) {
+        await pool.query('INSERT INTO fleet(plate,sort_order) VALUES($1,$2) ON CONFLICT DO NOTHING', [DEFAULT_FLEET[i], i]);
+      }
+      console.log('Fleet seeded with defaults');
+    }
     console.log('DB ready');
   } catch (e) {
     console.error('DB init error:', e.message);
@@ -378,6 +396,35 @@ app.get('/api/export/csv', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// FLEET (pojazdy)
+app.get('/api/fleet', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("SELECT plate, note FROM fleet WHERE active = TRUE ORDER BY sort_order, plate");
+    res.json(r.rows.map(x => ({ plate: x.plate, note: x.note })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/fleet', requireAuth, async (req, res) => {
+  try {
+    const plate = (req.body.plate || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!plate) return res.status(400).json({ error: 'Brak numeru rejestracyjnego' });
+    const note = (req.body.note || '').trim() || null;
+    const mx = await pool.query('SELECT COALESCE(MAX(sort_order),0)+1 AS n FROM fleet');
+    await pool.query(
+      "INSERT INTO fleet(plate,note,active,sort_order) VALUES($1,$2,TRUE,$3) ON CONFLICT(plate) DO UPDATE SET active=TRUE, note=EXCLUDED.note",
+      [plate, note, mx.rows[0].n]
+    );
+    res.json({ ok: true, plate: plate });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/fleet/:plate', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE fleet SET active = FALSE WHERE plate = $1', [req.params.plate]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const PORT = process.env.PORT || 3000;

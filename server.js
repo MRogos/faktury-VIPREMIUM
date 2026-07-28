@@ -6,6 +6,11 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const ksef = require('./ksef');
+const { parseFA3 } = require('./fa3-parser');
+
+// NIP-y zaszyte na sztywno per firma (zero pomylek). vt = GB, poza KSeF.
+const KSEF_NIP = { pt: '9880307881', et: '9131643401', vr: '8762406696' };
 
 const app = express();
 
@@ -116,6 +121,35 @@ async function initDB() {
       }
       console.log('Fleet seeded with defaults');
     }
+    // KSeF: ustawienia per firma (token + srodowisko) i poczekalnia faktur
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ksef_settings (
+        company VARCHAR(10) PRIMARY KEY,
+        token TEXT,
+        env VARCHAR(10) DEFAULT 'test',
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ksef_inbox (
+        id SERIAL PRIMARY KEY,
+        company VARCHAR(10),
+        ksef_number VARCHAR(80) UNIQUE,
+        invoice_no VARCHAR(200),
+        issue_date VARCHAR(20),
+        seller_nip VARCHAR(20),
+        seller_name VARCHAR(500),
+        seller_address VARCHAR(500),
+        net_amount NUMERIC(14,2),
+        vat_amount NUMERIC(14,2),
+        gross_amount NUMERIC(14,2),
+        currency VARCHAR(10) DEFAULT 'PLN',
+        items_json TEXT,
+        xml_raw TEXT,
+        status VARCHAR(20) DEFAULT 'new',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
     console.log('DB ready');
   } catch (e) {
     console.error('DB init error:', e.message);
@@ -426,6 +460,164 @@ app.post('/api/fleet', requireAuth, async (req, res) => {
 app.delete('/api/fleet/:plate', requireAuth, async (req, res) => {
   try {
     await pool.query('UPDATE fleet SET active = FALSE WHERE plate = $1', [req.params.plate]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ================= KSeF =================
+async function ksefCfgFor(company) {
+  const nip = KSEF_NIP[company];
+  if (!nip) throw new Error('Firma spoza KSeF (tylko PT&L / ET&VG / VMR)');
+  const r = await pool.query('SELECT token, env FROM ksef_settings WHERE company=$1', [company]);
+  const row = r.rows[0] || {};
+  return ksef.buildCfg({ nip, token: row.token || '', env: row.env || 'test' });
+}
+
+// Status ustawien per firma (token NIGDY nie wraca do klienta)
+app.get('/api/ksef/settings', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT company, env, token FROM ksef_settings');
+    const map = {};
+    r.rows.forEach(x => { map[x.company] = { env: x.env, hasToken: !!x.token }; });
+    const out = Object.keys(KSEF_NIP).map(c => ({
+      company: c, nip: KSEF_NIP[c],
+      env: (map[c] && map[c].env) || 'test',
+      hasToken: !!(map[c] && map[c].hasToken),
+    }));
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Zapis tokenu / srodowiska. token pusty => zostaje poprzedni (zmiana samego env).
+app.post('/api/ksef/settings', requireAuth, async (req, res) => {
+  try {
+    const company = req.body.company;
+    if (!KSEF_NIP[company]) return res.status(400).json({ error: 'Firma spoza KSeF' });
+    const env = ['test', 'demo', 'prod'].includes(req.body.env) ? req.body.env : 'test';
+    const token = (req.body.token || '').trim();
+    if (token) {
+      await pool.query(
+        `INSERT INTO ksef_settings (company, token, env, updated_at) VALUES ($1,$2,$3,NOW())
+         ON CONFLICT (company) DO UPDATE SET token=EXCLUDED.token, env=EXCLUDED.env, updated_at=NOW()`,
+        [company, token, env]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO ksef_settings (company, env, updated_at) VALUES ($1,$2,NOW())
+         ON CONFLICT (company) DO UPDATE SET env=EXCLUDED.env, updated_at=NOW()`,
+        [company, env]
+      );
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Test polaczenia dla firmy
+app.post('/api/ksef/test', requireAuth, async (req, res) => {
+  try {
+    const cfg = await ksefCfgFor(req.body.company);
+    if (!ksef.ready(cfg)) return res.status(400).json({ error: 'Brak tokenu dla tej firmy' });
+    const r = await ksef.ksefTest(cfg);
+    res.json({ ok: true, env: r.env, nip: r.nip });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Pobranie faktur zakupowych paczka (eksport -> polling -> deszyfracja -> poczekalnia)
+app.post('/api/ksef/pull', requireAuth, async (req, res) => {
+  const company = req.body.company;
+  const days = Math.min(Math.max(Number(req.body.days) || 30, 1), 730);
+  if (!KSEF_NIP[company]) return res.status(400).json({ error: 'Firma spoza KSeF' });
+  let cfg;
+  try { cfg = await ksefCfgFor(company); } catch (e) { return res.status(400).json({ error: e.message }); }
+  if (!ksef.ready(cfg)) return res.status(400).json({ error: 'Firma nie ma skonfigurowanego tokenu KSeF' });
+
+  const teraz = new Date();
+  const od = new Date(teraz.getTime() - days * 86400000);
+  let nowe = 0, duplikaty = 0, bledy = 0; const errors = [];
+  try {
+    const zlecenie = await ksef.ksefZlecEksport(cfg, { dateFrom: od.toISOString(), dateTo: teraz.toISOString() });
+    let czesci = []; let ostatniOpis = '';
+    for (let proba = 0; proba < 25; proba++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const st = await ksef.ksefStatusEksportu(cfg, zlecenie.referenceNumber);
+      ostatniOpis = st.kodStatusu + ' ' + st.opis;
+      if (st.gotowe) { czesci = st.czesci; break; }
+      if (st.kodStatusu >= 400) return res.status(502).json({ error: 'KSeF eksport nieudany: ' + ostatniOpis });
+    }
+    if (!czesci.length) return res.status(504).json({ error: 'Eksport nie zakonczyl sie w oczekiwanym czasie (status: ' + ostatniOpis + '). Sprobuj ponownie za chwile.' });
+
+    const faktury = await ksef.ksefPobierzPaczke(zlecenie, czesci);
+    for (const f of faktury) {
+      try {
+        const p = parseFA3(f.xml);
+        const numerKsef = f.nazwa.replace(/\.xml$/i, '').split('/').pop() || f.nazwa;
+        try {
+          await pool.query(
+            `INSERT INTO ksef_inbox (company,ksef_number,invoice_no,issue_date,seller_nip,seller_name,seller_address,net_amount,vat_amount,gross_amount,currency,items_json,xml_raw,status)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'new')`,
+            [company, numerKsef, p.numer, p.dataWystawienia, p.sprzedawcaNip, p.sprzedawcaNazwa, p.sprzedawcaAdres,
+             p.netto, p.vat, p.brutto, p.waluta, JSON.stringify(p.pozycje || []), f.xml]
+          );
+          nowe++;
+        } catch (insErr) {
+          if (insErr.code === '23505') duplikaty++;
+          else { bledy++; errors.push(numerKsef + ': ' + insErr.message); }
+        }
+      } catch (e) { bledy++; errors.push(f.nazwa + ': ' + (e.message || 'blad parsowania')); }
+    }
+    res.json({ ok: true, wPaczce: faktury.length, nowe, duplikaty, bledy, errors: errors.slice(0, 5) });
+  } catch (e) { res.status(500).json({ error: e.message || 'Blad eksportu z KSeF' }); }
+});
+
+// Poczekalnia — faktury pobrane, jeszcze nie zaksiegowane
+app.get('/api/ksef/inbox', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, company, ksef_number, invoice_no, issue_date, seller_nip, seller_name, seller_address,
+              net_amount, vat_amount, gross_amount, currency, items_json
+       FROM ksef_inbox WHERE status='new' ORDER BY issue_date DESC, id DESC`
+    );
+    res.json(r.rows.map(x => ({
+      id: x.id, company: x.company, ksefNumber: x.ksef_number, num: x.invoice_no, date: x.issue_date,
+      sellerNip: x.seller_nip, seller: x.seller_name, sellerAddr: x.seller_address,
+      netto: x.net_amount != null ? parseFloat(x.net_amount) : 0,
+      vat: x.vat_amount != null ? parseFloat(x.vat_amount) : 0,
+      brutto: x.gross_amount != null ? parseFloat(x.gross_amount) : 0,
+      currency: x.currency || 'PLN',
+      items: (() => { try { return JSON.parse(x.items_json || '[]'); } catch (e) { return []; } })(),
+    })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Zaksieguj pozycje z poczekalni -> faktura kosztowa (z przypisanym autem + kategoria)
+app.post('/api/ksef/inbox/:id/book', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const costCat = req.body.costCat || 'other';
+    const vehicles = Array.isArray(req.body.vehicles) ? req.body.vehicles : [];
+    const r = await pool.query('SELECT * FROM ksef_inbox WHERE id=$1', [id]);
+    const it = r.rows[0];
+    if (!it) return res.status(404).json({ error: 'Nie znaleziono w poczekalni' });
+    if (it.status === 'booked') return res.status(400).json({ error: 'Juz zaksiegowana' });
+    const net = Number(it.net_amount) || 0, vat = Number(it.vat_amount) || 0, gross = Number(it.gross_amount) || 0;
+    const vatRate = net > 0 ? Math.round(vat / net * 100) : 23;
+    const invId = 'ksef' + String(it.ksef_number || id).replace(/[^a-zA-Z0-9]/g, '');
+    await pool.query(
+      `INSERT INTO invoices (id,company,type,num,date,contractor,brutto,vat_rate,currency,cost_cat,vehicles,vat_amount,vat_manual,note,confidence)
+       VALUES ($1,$2,'buy',$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12,'ksef')
+       ON CONFLICT (id) DO NOTHING`,
+      [invId, it.company, it.invoice_no || '', it.issue_date || '', it.seller_name || '', gross, vatRate,
+       it.currency || 'PLN', costCat, JSON.stringify(vehicles), vat, 'KSeF: ' + it.ksef_number]
+    );
+    await pool.query("UPDATE ksef_inbox SET status='booked' WHERE id=$1", [id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Odrzuc pozycje z poczekalni (nie ksiegujemy)
+app.delete('/api/ksef/inbox/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query("UPDATE ksef_inbox SET status='discarded' WHERE id=$1", [req.params.id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

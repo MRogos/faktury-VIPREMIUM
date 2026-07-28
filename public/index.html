@@ -170,6 +170,10 @@ tr:hover td{background:rgba(0,0,0,.02)}
         <div style="font-size:16px">&#128229;</div>
         <div style="font-size:10px;font-weight:600;color:#60a8f0;margin-top:2px">Import</div>
       </div>
+      <div id="nav-ksef" onclick="goTab('ksef')" style="flex:1;border-radius:7px;padding:7px 4px;text-align:center;cursor:pointer;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);transition:all .15s">
+        <div style="font-size:16px">&#127974;</div>
+        <div style="font-size:10px;font-weight:600;color:var(--amber);margin-top:2px">KSeF</div>
+      </div>
     </div>
     <!-- Moduły renderowane dynamicznie w accordion -->
   </nav>
@@ -263,6 +267,11 @@ tr:hover td{background:rgba(0,0,0,.02)}
       <p class="sub" id="fixsub"></p>
       <div id="fixfilters" style="margin-bottom:16px"></div>
       <div id="fixcontent"></div>
+    </div>
+    <div id="page-ksef" style="display:none">
+      <h1>KSeF — pobieranie faktur</h1>
+      <p class="sub">Faktury zakupowe z Krajowego Systemu e-Faktur</p>
+      <div id="ksef-content"></div>
     </div>
     <div id="page-office" style="display:none">
       <h1>Biuro</h1>
@@ -557,9 +566,10 @@ function pickCo(id){
 
 function goTab(t){
   curTab=t;
-  ['scan','import','ledger','firms','dash','vehicles','fixed','office'].forEach(function(id){
-    g('page-'+id).style.display=id===t?'':'none';
+  ['scan','import','ledger','firms','dash','vehicles','fixed','office','ksef'].forEach(function(id){
+    var pg=g('page-'+id);if(pg)pg.style.display=id===t?'':'none';
   });
+  var ksEl=g('nav-ksef');if(ksEl)ksEl.style.opacity=t==='ksef'?'1':'0.7';
   // Dashboard button
   var dashEl=g('nav-dash');
   if(dashEl){
@@ -574,7 +584,146 @@ function goTab(t){
   renderCoTiles();
   renderCur();
 }
-function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();if(curTab==='fixed')renderFixed();if(curTab==='office')renderOffice();}
+function renderCur(){if(curTab==='ledger')renderLedger();if(curTab==='firms')renderFirms();if(curTab==='dash')renderDash();if(curTab==='vehicles')renderVehicles();if(curTab==='fixed')renderFixed();if(curTab==='office')renderOffice();if(curTab==='ksef')renderKsef();}
+
+// ================= KSeF (moduł pobierania faktur) =================
+var _ksefSettings=[], _ksefInbox=[], _ksefAssign={};
+function coName(c){return (CO_COLORS[c]&&CO_COLORS[c].short)||c;}
+function coColor(c){return (CO_COLORS[c]&&CO_COLORS[c].color)||'#f59e0b';}
+
+function renderKsef(){
+  var el=g('ksef-content'); if(!el)return;
+  el.innerHTML='<div style="color:var(--muted);padding:16px">Ładowanie…</div>';
+  Promise.all([
+    fetch('/api/ksef/settings',{headers:{'x-auth-token':tok()}}).then(function(r){return r.json();}),
+    fetch('/api/ksef/inbox',{headers:{'x-auth-token':tok()}}).then(function(r){return r.json();})
+  ]).then(function(res){
+    _ksefSettings=Array.isArray(res[0])?res[0]:[];
+    _ksefInbox=Array.isArray(res[1])?res[1]:[];
+    drawKsef();
+  }).catch(function(e){el.innerHTML='<div class="empty" style="padding:20px">Błąd: '+e.message+'</div>';});
+}
+
+function drawKsef(){
+  var el=g('ksef-content'); if(!el)return;
+  var h='';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin-bottom:8px">';
+  _ksefSettings.forEach(function(s){
+    h+='<div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid '+coColor(s.company)+';border-radius:10px;padding:16px;box-shadow:var(--shadow)">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-weight:700;font-size:14px">'+coName(s.company)+'</span>'
+      +'<span style="font-size:11px;padding:2px 8px;border-radius:20px;'+(s.hasToken?'background:#dcfce7;color:#16a34a':'background:#fee2e2;color:#dc2626')+'">'+(s.hasToken?'token OK':'brak tokenu')+'</span></div>';
+    h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:var(--mono)">NIP '+s.nip+' · środowisko: '+(s.env||'test')+'</div>';
+    h+='<div style="display:flex;gap:6px;margin-bottom:8px">';
+    h+='<input id="kt-'+s.company+'" type="password" placeholder="Wklej token KSeF" style="flex:1;padding:7px 9px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px">';
+    h+='<select id="ke-'+s.company+'" style="padding:7px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px">'
+      +['test','demo','prod'].map(function(e){return '<option value="'+e+'"'+(s.env===e?' selected':'')+'>'+e+'</option>';}).join('')+'</select>';
+    h+='</div>';
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+    h+='<button class="sm" onclick="ksefSaveToken(\''+s.company+'\')">Zapisz token</button>';
+    h+='<button class="sm" onclick="ksefTestCo(\''+s.company+'\')">Test</button>';
+    if(s.hasToken){
+      h+='<span style="flex:1"></span>';
+      h+='<select id="kd-'+s.company+'" style="padding:6px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px">'
+        +[['30','30 dni'],['90','90 dni'],['180','180 dni'],['365','rok']].map(function(o){return '<option value="'+o[0]+'"'+(o[0]==='90'?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>';
+      h+='<button class="prim" onclick="ksefPull(\''+s.company+'\')">Pobierz paczkę</button>';
+    }
+    h+='</div>';
+    h+='<div id="kstat-'+s.company+'" style="font-size:11px;color:var(--muted);margin-top:8px;min-height:14px"></div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  var configured=_ksefSettings.filter(function(s){return s.hasToken;});
+  if(configured.length>1){
+    h+='<div style="margin:4px 0 18px"><button class="prim" onclick="ksefPullAll()">⬇ Pobierz ze wszystkich ('+configured.length+' firm, 90 dni)</button> <span id="kstat-all" style="font-size:11px;color:var(--muted);margin-left:8px"></span></div>';
+  }
+  h+='<div style="margin-top:8px;font-weight:700;font-size:14px">Do przypisania ('+_ksefInbox.length+')</div>';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Pobrane faktury — przypisz kategorię i auto, potem „Zaksięguj". Nic nie trafia do Księgi bez Twojego kliknięcia.</div>';
+  if(!_ksefInbox.length){
+    h+='<div class="empty" style="padding:24px">Brak faktur w poczekalni. Pobierz paczkę powyżej.</div>';
+  } else {
+    _ksefInbox.forEach(function(it){
+      var a=_ksefAssign[it.id]||(_ksefAssign[it.id]={costCat:'fuel',vehicles:[]});
+      h+='<div style="background:#fff;border:1px solid var(--border);border-left:4px solid '+coColor(it.company)+';border-radius:10px;padding:12px 14px;margin-bottom:10px">';
+      h+='<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:flex-start">';
+      h+='<div><span style="font-weight:700;font-size:13px">'+esc(it.num||'—')+'</span> <span style="font-size:11px;color:var(--muted)">'+coName(it.company)+' · '+(it.date||'')+'</span><br><span style="font-size:12px">'+esc(it.seller||'')+'</span> <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">'+(it.sellerNip||'')+'</span></div>';
+      h+='<div style="text-align:right;font-family:var(--mono)"><div style="font-weight:700;font-size:14px">'+fmt(it.brutto)+(it.currency&&it.currency!=='PLN'?' '+it.currency:'')+'</div><div style="font-size:10px;color:var(--muted)">netto '+fmt(it.netto)+' · VAT '+fmt(it.vat)+'</div></div>';
+      h+='</div>';
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">';
+      h+='<select onchange="ksefSetCat('+it.id+',this.value)" style="padding:6px 9px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px">'
+        +CATS.map(function(c){return '<option value="'+c.id+'"'+(a.costCat===c.id?' selected':'')+'>'+c.icon+' '+c.label+'</option>';}).join('')+'</select>';
+      h+='<span onclick="ksefVehPick('+it.id+')" style="padding:6px 10px;border:1.5px solid var(--border2);border-radius:8px;font-size:12px;cursor:pointer;background:var(--bg3)">🚚 '+(a.vehicles.length?a.vehicles.join(', '):'Przypisz auta…')+'</span>';
+      h+='<span style="flex:1"></span>';
+      h+='<button class="prim" onclick="ksefBook('+it.id+')">Zaksięguj</button>';
+      h+='<button class="sm del" onclick="ksefDiscard('+it.id+')">Odrzuć</button>';
+      h+='</div>';
+      h+='<div id="kveh-'+it.id+'" style="display:none;margin-top:8px;padding:8px;background:var(--bg3);border-radius:8px"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">'
+        +FLEET.map(function(v){return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" value="'+v+'"'+(a.vehicles.indexOf(v)>=0?' checked':'')+' onchange="ksefVehToggle('+it.id+',&quot;'+v+'&quot;,this.checked)" style="width:14px;height:14px;flex:0 0 auto;accent-color:var(--accent)">'+v+'</label>';}).join('')
+        +'</div></div>';
+      h+='</div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+function ksefSaveToken(c){
+  var token=(g('kt-'+c).value||'').trim(), env=g('ke-'+c).value;
+  var st=g('kstat-'+c); st.textContent='Zapisywanie…'; st.style.color='var(--muted)';
+  fetch('/api/ksef/settings',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({company:c,token:token,env:env})})
+  .then(function(r){return r.json();}).then(function(d){ if(d.error){st.textContent='❌ '+d.error;st.style.color='#dc2626';return;} renderKsef(); })
+  .catch(function(e){st.textContent='❌ '+e.message;st.style.color='#dc2626';});
+}
+function ksefTestCo(c){
+  var st=g('kstat-'+c); st.textContent='Testuję połączenie…'; st.style.color='var(--muted)';
+  fetch('/api/ksef/test',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({company:c})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.error){st.textContent='❌ '+d.error;st.style.color='#dc2626';return;}
+    st.textContent='✅ Połączono ('+d.env+', NIP '+d.nip+')'; st.style.color='#16a34a';
+  }).catch(function(e){st.textContent='❌ '+e.message;st.style.color='#dc2626';});
+}
+function ksefPull(c){
+  var days=g('kd-'+c)?g('kd-'+c).value:'90';
+  var st=g('kstat-'+c); st.textContent='Pobieram paczkę z KSeF (kilkanaście sekund)…'; st.style.color='var(--muted)';
+  fetch('/api/ksef/pull',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({company:c,days:Number(days)})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.error){st.textContent='❌ '+d.error;st.style.color='#dc2626';return;}
+    st.textContent='✅ W paczce '+d.wPaczce+' · nowe '+d.nowe+' · duplikaty '+d.duplikaty+(d.bledy?' · błędy '+d.bledy:''); st.style.color='#16a34a';
+    renderKsef();
+  }).catch(function(e){st.textContent='❌ '+e.message;st.style.color='#dc2626';});
+}
+function ksefPullAll(){
+  var configured=_ksefSettings.filter(function(s){return s.hasToken;});
+  var st=g('kstat-all'); var i=0; var sum={nowe:0,dup:0};
+  function next(){
+    if(i>=configured.length){ if(st)st.textContent='✅ Gotowe. Nowe: '+sum.nowe+', duplikaty: '+sum.dup; renderKsef(); return; }
+    var c=configured[i].company; if(st)st.textContent='Pobieram '+coName(c)+' ('+(i+1)+'/'+configured.length+')…';
+    fetch('/api/ksef/pull',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({company:c,days:90})})
+    .then(function(r){return r.json();}).then(function(d){ if(!d.error){sum.nowe+=d.nowe||0;sum.dup+=d.duplikaty||0;} i++; next(); })
+    .catch(function(){ i++; next(); });
+  }
+  next();
+}
+function ksefSetCat(id,v){ (_ksefAssign[id]||(_ksefAssign[id]={costCat:'fuel',vehicles:[]})).costCat=v; }
+function ksefVehPick(id){ var el=g('kveh-'+id); if(el)el.style.display=el.style.display==='none'?'':'none'; }
+function ksefVehToggle(id,v,on){
+  var a=_ksefAssign[id]||(_ksefAssign[id]={costCat:'fuel',vehicles:[]});
+  var i=a.vehicles.indexOf(v);
+  if(on&&i<0)a.vehicles.push(v);
+  if(!on&&i>=0)a.vehicles.splice(i,1);
+}
+function ksefBook(id){
+  var a=_ksefAssign[id]||{costCat:'other',vehicles:[]};
+  fetch('/api/ksef/inbox/'+id+'/book',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({costCat:a.costCat,vehicles:a.vehicles})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.error){alert('Błąd: '+d.error);return;}
+    delete _ksefAssign[id]; loadInvs(); renderKsef();
+  }).catch(function(e){alert('Błąd: '+e.message);});
+}
+function ksefDiscard(id){
+  if(!confirm('Odrzucić tę fakturę z poczekalni? (nie zostanie zaksięgowana)'))return;
+  fetch('/api/ksef/inbox/'+id,{method:'DELETE',headers:{'x-auth-token':tok()}})
+  .then(function(r){return r.json();}).then(function(){ delete _ksefAssign[id]; renderKsef(); })
+  .catch(function(e){alert('Błąd: '+e.message);});
+}
 
 function renderLedger(){
   g('lsub').textContent=coLabel()+' — '+periodLabel();

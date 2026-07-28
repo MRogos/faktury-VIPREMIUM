@@ -1,0 +1,79 @@
+// =====================================================================
+//  Parser XML faktury FA(3) -> dane kosztu (pobieranie z KSeF).
+//  Regex-based (bez zaleznosci XML), odporny na whitespace/namespace.
+//  Port z Premium TMS (fa3-parser.ts).
+// =====================================================================
+
+const dec = (s) => s
+  .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+  .replace(/&#(\d+);/g, (_, dziesietnie) => String.fromCodePoint(parseInt(dziesietnie, 10)))
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+
+function tag(xml, name) {
+  const re = new RegExp(`<(?:\\w+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'i');
+  const m = xml.match(re);
+  return m ? dec(m[1].trim()) : null;
+}
+
+function block(xml, name) {
+  return tag(xml, name);
+}
+
+function tagAll(xml, name) {
+  const re = new RegExp(`<(?:\\w+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'gi');
+  const out = [];
+  let m;
+  while ((m = re.exec(xml)) !== null) out.push(dec(m[1].trim()));
+  return out;
+}
+
+const num = (s) => {
+  if (!s) return 0;
+  const n = Number(String(s).replace(',', '.').replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? 0 : n;
+};
+
+function parseFA3(xml) {
+  const p1 = block(xml, 'Podmiot1') || '';
+  const p2 = block(xml, 'Podmiot2') || '';
+  const p1Ident = block(p1, 'DaneIdentyfikacyjne') || p1;
+  const p2Ident = block(p2, 'DaneIdentyfikacyjne') || p2;
+  const p1Adres = block(p1, 'Adres') || '';
+
+  const fa = block(xml, 'Fa') || xml;
+
+  let netto = 0, vat = 0;
+  for (let i = 1; i <= 11; i++) {
+    netto += num(tag(fa, `P_13_${i}`));
+    vat += num(tag(fa, `P_14_${i}`));
+  }
+  ['6_1', '6_2', '6_3'].forEach((g) => { netto += num(tag(fa, `P_13_${g}`)); });
+  const brutto = num(tag(fa, 'P_15'));
+
+  const wiersze = tagAll(fa, 'FaWiersz');
+  const pozycje = wiersze.map((w) => ({
+    nazwa: tag(w, 'P_7') || '',
+    netto: num(tag(w, 'P_11')),
+    stawka: tag(w, 'P_12') || '',
+  }));
+
+  return {
+    numer: tag(fa, 'P_2'),
+    dataWystawienia: tag(fa, 'P_1'),
+    dataSprzedazy: tag(fa, 'P_6'),
+    waluta: tag(fa, 'KodWaluty') || 'PLN',
+    sprzedawcaNip: tag(p1Ident, 'NIP'),
+    sprzedawcaNazwa: tag(p1Ident, 'Nazwa') || tag(p1Ident, 'PelnaNazwa'),
+    sprzedawcaAdres: tag(p1Adres, 'AdresL1'),
+    nabywcaNip: tag(p2Ident, 'NIP'),
+    nabywcaNazwa: tag(p2Ident, 'Nazwa') || tag(p2Ident, 'PelnaNazwa'),
+    netto,
+    vat,
+    brutto: brutto || (netto + vat),
+    pozycje,
+    rodzaj: tag(fa, 'RodzajFaktury'),
+  };
+}
+
+module.exports = { parseFA3 };

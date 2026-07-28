@@ -622,5 +622,25 @@ app.delete('/api/ksef/inbox/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Szczegoly faktury z KSeF (do podgladu) - po numerze KSeF, z ksef_inbox
+app.get('/api/ksef/detail', requireAuth, async (req, res) => {
+  try {
+    const ksefNumber = (req.query.ksef || '').trim();
+    if (!ksefNumber) return res.status(400).json({ error: 'Brak numeru KSeF' });
+    const r = await pool.query('SELECT * FROM ksef_inbox WHERE ksef_number=$1', [ksefNumber]);
+    const it = r.rows[0];
+    if (!it) return res.status(404).json({ error: 'Brak zapisanych danych KSeF dla tej faktury' });
+    res.json({
+      ksefNumber: it.ksef_number, num: it.invoice_no, date: it.issue_date,
+      sellerNip: it.seller_nip, seller: it.seller_name, sellerAddr: it.seller_address,
+      netto: it.net_amount != null ? parseFloat(it.net_amount) : 0,
+      vat: it.vat_amount != null ? parseFloat(it.vat_amount) : 0,
+      brutto: it.gross_amount != null ? parseFloat(it.gross_amount) : 0,
+      currency: it.currency || 'PLN',
+      items: (() => { try { return JSON.parse(it.items_json || '[]'); } catch (e) { return []; } })(),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

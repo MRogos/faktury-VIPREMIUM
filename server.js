@@ -93,6 +93,7 @@ async function initDB() {
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,4)",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS attachment_url TEXT",
       "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_date VARCHAR(20)",
+      "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vat_manual BOOLEAN DEFAULT FALSE",
     ];
     for (const sql of migrations) {
       await pool.query(sql).catch(e => console.log('Migration skip:', e.message));
@@ -170,6 +171,7 @@ app.get('/api/invoices', requireAuth, async (req, res) => {
       vehicleBreakdown: JSON.parse(r.vehicle_breakdown || '[]'),
       vatCountry: r.vat_country || null,
       vatAmount: r.vat_amount ? parseFloat(r.vat_amount) : null,
+      vatManual: r.vat_manual || false,
       attachmentUrl: r.attachment_url || null,
     }));
     res.json(rows);
@@ -190,12 +192,12 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
         id, company, type, num, date, contractor, buyer, description,
         brutto, brutto_orig, vat_rate, currency, nbp_rate, nbp_date,
         nbp_table, nbp_info, confidence, paid, due_date, note, cost_cat,
-        vehicles, vehicle_breakdown, vat_country, vat_amount, paid_date
+        vehicles, vehicle_breakdown, vat_country, vat_amount, paid_date, vat_manual
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,
         $9,$10,$11,$12,$13,$14,
         $15,$16,$17,$18,$19,$20,$21,
-        $22,$23,$24,$25,$26
+        $22,$23,$24,$25,$26,$27
       )
       ON CONFLICT (id) DO UPDATE SET
         company = EXCLUDED.company,
@@ -222,7 +224,8 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
         vat_country = EXCLUDED.vat_country,
         vat_amount = EXCLUDED.vat_amount,
         paid = EXCLUDED.paid,
-        paid_date = EXCLUDED.paid_date
+        paid_date = EXCLUDED.paid_date,
+        vat_manual = EXCLUDED.vat_manual
     `, [
       i.id, i.company || 'vt', i.type || 'buy', i.num || '', i.date || '',
       i.contractor || '', i.buyer || '', i.description || '',
@@ -232,7 +235,7 @@ app.post('/api/invoices', requireAuth, async (req, res) => {
       i.paid || false, i.dueDate || null, i.note || null,
       i.costCat || 'other', JSON.stringify(i.vehicles || []), JSON.stringify(i.vehicleBreakdown || []),
       i.vatCountry || null, i.vatAmount || null,
-      i.paidDate || null
+      i.paidDate || null, i.vatManual || false
     ]);
 
     console.log('Saved invoice:', i.id, i.num, i.brutto);

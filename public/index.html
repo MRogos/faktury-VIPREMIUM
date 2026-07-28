@@ -289,6 +289,8 @@ var CATS=[
   {id:'customs', label:'Odprawa celna',   icon:'📋'},
   {id:'fixed',   label:'Koszty stale',    icon:'📌'},
   {id:'office',  label:'Biuro',           icon:'🏢'},
+  {id:'driver',  label:'Kierowcy wypłata',icon:'👤'},
+  {id:'internal',label:'Koszt wewnętrzny',icon:'🔄'},
   {id:'other',   label:'Inne',            icon:'📦'}
 ];
 
@@ -316,6 +318,7 @@ var OWN_COMPANIES=[
   'elite van'
 ];
 function isInternalInv(inv){
+  if(inv.costCat==='internal')return true;
   var con=(inv.contractor||'').toLowerCase();
   return OWN_COMPANIES.some(function(n){return con.indexOf(n)>=0;});
 }
@@ -372,6 +375,10 @@ var _salesIds=[],_costsIds=[],_overdueIds=[];
 function fmt(n){return new Intl.NumberFormat('pl-PL',{style:'currency',currency:'PLN'}).format(+n||0);}
 function calcN(b,v){return b/(1+v/100);}
 function calcV(b,v){return b-calcN(b,v);}
+function nettoOf(inv){if(inv.vatManual&&typeof inv.vatAmount==='number')return (inv.brutto||0)-inv.vatAmount;return calcN(inv.brutto,inv.vatRate);}
+function vatOf(inv){if(inv.vatManual&&typeof inv.vatAmount==='number')return inv.vatAmount;return calcV(inv.brutto,inv.vatRate);}
+function netInv(inv){return inv.type==='buy'?calcNettoForInv(inv):nettoOf(inv);}
+function vatInv(inv){return inv.type==='buy'?calcVatForInv(inv):vatOf(inv);}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function today(){return new Date().toISOString().slice(0,10);}
 function tok(){return sessionStorage.getItem('vip_pass')||'';}
@@ -474,7 +481,7 @@ function stats(coId){
   var s=inv.filter(function(i){return i.type==='sale';});
   var b=inv.filter(function(i){return i.type==='buy';});
   var gI=0,gO=0,nI=0,nO=0,vI=0,vO=0,pO=0,uO=0;
-  s.forEach(function(i){gI+=i.brutto;nI+=calcN(i.brutto,i.vatRate);vI+=calcV(i.brutto,i.vatRate);});
+  s.forEach(function(i){gI+=i.brutto;nI+=netInv(i);vI+=vatInv(i);});
   b.forEach(function(i){gO+=i.brutto;nO+=calcNettoForInv(i);vO+=calcVatForInv(i);if(i.paid)pO+=i.brutto;else uO+=i.brutto;});
   return{gI:gI,gO:gO,nI:nI,nO:nO,vI:vI,vO:vO,vatDue:vI-vO,bal:nI-nO,cnt:inv.length,pO:pO,uO:uO};
 }
@@ -1088,7 +1095,7 @@ function renderFirms(){
             +(i.num?'<div style="font-weight:600;color:var(--text);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.num+'</div>':'')
             +'<div style="opacity:.5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(i.contractor||'-').slice(0,38)+'</div>'
             +'</td>';
-          h+='<td style="text-align:right">'+fmt(calcN(i.brutto,i.vatRate))+'</td>';
+          h+='<td style="text-align:right">'+fmt(netInv(i))+'</td>';
           h+='<td style="text-align:right;opacity:.6">'+i.vatRate+'%</td>';
           h+='<td style="text-align:right;color:var(--accent)">'+fmt(i.brutto)+'</td>';
           h+='<td style="text-align:center">'+(i.type==='buy'?'<input class="chk-paid" type="checkbox" '+(i.paid?'checked':'')+' data-id='+i.id+' data-action="paid" onchange="onChkChange(event)">':'-')+'</td>';
@@ -1763,7 +1770,7 @@ function renderDash(){
     var b=allInv.filter(function(i){return i.type==='buy';});
     var gI=s.reduce(function(a,i){return a+i.brutto;},0);
     var gO=b.reduce(function(a,i){return a+i.brutto;},0);
-    var balI=s.reduce(function(a,i){return a+calcN(i.brutto,i.vatRate);},0);
+    var balI=s.reduce(function(a,i){return a+netInv(i);},0);
     var balO=b.reduce(function(a,i){return a+calcNettoForInv(i);},0);
     var bal=balI-balO;
     var plus=bal>=0;
@@ -1800,7 +1807,7 @@ function renderDash(){
     var buyerIsOurs = GROUP_KEYWORDS.some(function(kw){ return buyer.indexOf(kw)>=0; });
     // Intercompany = contractor is one of our firms AND company field is also ours
     // Or: contractor is ours (we're paying ourselves)
-    return contIsOurs && buyerIsOurs;
+    return (inv.costCat==='internal') || (contIsOurs && buyerIsOurs);
   }
 
   // Consolidated stats - external only
@@ -1809,7 +1816,7 @@ function renderDash(){
   var extCosts = extInvs.filter(function(i){ return i.type==='buy'; });
   var extGI = extSales.reduce(function(a,i){return a+i.brutto;},0);
   var extGO = extCosts.reduce(function(a,i){return a+i.brutto;},0);
-  var extBalI = extSales.reduce(function(a,i){return a+calcN(i.brutto,i.vatRate);},0);
+  var extBalI = extSales.reduce(function(a,i){return a+netInv(i);},0);
   var extBalO = extCosts.reduce(function(a,i){return a+calcNettoForInv(i);},0);
   var extBal = extBalI - extBalO;
   var interCount = invs.length - extInvs.length;
@@ -1970,6 +1977,8 @@ function openEdit(id){
   m.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
   var catOpts=CATS.map(function(ct){return '<option value="'+ct.id+'"'+(inv.costCat===ct.id?' selected':'')+'>'+ct.icon+' '+ct.label+'</option>';}).join('');
   var vehOpts='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">'+FLEET.map(function(v){return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" value="'+v+'"'+(inv.vehicles&&inv.vehicles.indexOf(v)>=0?' checked':'')+' style="width:14px;height:14px;flex:0 0 auto;accent-color:var(--accent)">'+v+'</label>';}).join('')+'</div>';
+  var _eiVat=(inv.vatManual&&typeof inv.vatAmount==='number')?inv.vatAmount:Math.round(calcV(inv.brutto||0,inv.vatRate||0)*100)/100;
+  var _eiNetto=Math.round(((inv.brutto||0)-_eiVat)*100)/100;
   m.innerHTML='<div style="background:var(--bg1);border:0.5px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><div style="font-weight:700;font-size:16px">&#9998; Edycja faktury</div><button class="sm" onclick="closeEdit()">&#10005;</button></div>'
     +'<div class="g2" style="gap:10px;margin-bottom:10px">'
@@ -1978,9 +1987,15 @@ function openEdit(id){
     +'</div>'
     +'<div class="fg" style="margin-bottom:10px"><label>Kontrahent</label><input id="ei-con" type="text" value="'+esc(inv.contractor||'')+'"></div>'
     +'<div class="g2" style="gap:10px;margin-bottom:10px">'
-    +'<div class="fg"><label>Kwota brutto PLN</label><input id="ei-brutto" type="number" step="0.01" value="'+(inv.brutto||0)+'"></div>'
-    +'<div class="fg"><label>Stawka VAT</label><select id="ei-vat">'+VATS.map(function(r){return '<option value="'+r+'"'+(inv.vatRate===r?' selected':'')+'>'+r+'%</option>';}).join('')+'</select></div>'
+    +'<div class="fg"><label>Kwota brutto PLN</label><input id="ei-brutto" type="number" step="0.01" value="'+(inv.brutto||0)+'" oninput="eiSync(\'brutto\')"></div>'
+    +'<div class="fg"><label>Stawka VAT</label><select id="ei-vat" onchange="eiSync(\'rate\')">'+VATS.map(function(r){return '<option value="'+r+'"'+(inv.vatRate===r?' selected':'')+'>'+r+'%</option>';}).join('')+'</select></div>'
     +'</div>'
+    +'<div class="g2" style="gap:10px;margin-bottom:4px">'
+    +'<div class="fg"><label>Kwota netto PLN</label><input id="ei-netto" type="number" step="0.01" value="'+_eiNetto+'" oninput="eiSync(\'netto\')"></div>'
+    +'<div class="fg"><label>VAT (kwota) PLN</label><input id="ei-vatamt" type="number" step="0.01" value="'+_eiVat+'" oninput="eiSync(\'vat\')"></div>'
+    +'</div>'
+    +'<input type="hidden" id="ei-manual" value="'+(inv.vatManual?'1':'0')+'">'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Edytując netto lub VAT nadpisujesz automatyczne wyliczenie ze stawki (np. gdy skan źle odczytał VAT).</div>'
     +'<div class="g2" style="gap:10px;margin-bottom:10px">'
     +'<div class="fg"><label>Kategoria kosztu</label><select id="ei-cat">'+catOpts+'</select></div>'
     +'<div class="fg"><label>Termin platnosci</label><input id="ei-due" type="date" value="'+(inv.dueDate||'')+'"></div>'
@@ -1992,6 +2007,26 @@ function openEdit(id){
     +'<button class="btn" onclick="saveEdit(\''+id+'\')">Zapisz zmiany</button>'
     +'</div>'
     +'</div>';
+}
+
+function eiSync(src){
+  var b=parseFloat(g('ei-brutto').value)||0;
+  var rate=parseInt(g('ei-vat').value)||0;
+  var nEl=g('ei-netto'),vEl=g('ei-vatamt');
+  if(src==='netto'){
+    var netto=parseFloat(nEl.value)||0;
+    vEl.value=Math.round((b-netto)*100)/100;
+    g('ei-manual').value='1';
+  } else if(src==='vat'){
+    var vat=parseFloat(vEl.value)||0;
+    nEl.value=Math.round((b-vat)*100)/100;
+    g('ei-manual').value='1';
+  } else {
+    var n2=Math.round(b/(1+rate/100)*100)/100;
+    nEl.value=n2;
+    vEl.value=Math.round((b-n2)*100)/100;
+    g('ei-manual').value='0';
+  }
 }
 
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
@@ -2006,6 +2041,12 @@ function saveEdit(id){
   inv.contractor=document.getElementById('ei-con').value;
   inv.brutto=parseFloat(document.getElementById('ei-brutto').value)||0;
   inv.vatRate=parseInt(document.getElementById('ei-vat').value)||0;
+  if(document.getElementById('ei-manual')&&document.getElementById('ei-manual').value==='1'){
+    inv.vatManual=true;
+    inv.vatAmount=Math.round((parseFloat(document.getElementById('ei-vatamt').value)||0)*100)/100;
+  } else {
+    inv.vatManual=false;
+  }
   inv.costCat=document.getElementById('ei-cat').value;
   inv.dueDate=document.getElementById('ei-due').value||null;
   inv.note=document.getElementById('ei-note').value||null;
@@ -2059,19 +2100,23 @@ function isHalfVatInv(inv){
 // Nadpisuje calcV dla faktur z autami osobowymi
 function calcVatForInv(inv){
   if(isForeignVatInv(inv)) return 0; // VAT zagraniczny - nie wchodzi do PL VAT
-  var v = calcV(inv.brutto, inv.vatRate);
-  return isHalfVatInv(inv) ? v * 0.5 : v;
+  if(isHalfVatInv(inv)) return calcV(inv.brutto, inv.vatRate) * 0.5;
+  if(inv.vatManual && typeof inv.vatAmount==='number') return inv.vatAmount;
+  return calcV(inv.brutto, inv.vatRate);
 }
 function calcNettoForInv(inv){
   if(isForeignVatInv(inv)){
     // Koszt = NETTO (bez VAT zagranicznego) - VAT odzyskiwany osobno przez VAT-REF
     return calcN(inv.brutto, inv.vatRate);
   }
-  if(!isHalfVatInv(inv)) return calcN(inv.brutto, inv.vatRate);
-  // 50% VAT = można odliczyć połowę, reszta to koszt
-  var netto = calcN(inv.brutto, inv.vatRate);
-  var vat = calcV(inv.brutto, inv.vatRate);
-  return netto + vat * 0.5;
+  if(isHalfVatInv(inv)){
+    // 50% VAT = można odliczyć połowę, reszta to koszt
+    var nettoH = calcN(inv.brutto, inv.vatRate);
+    var vatH = calcV(inv.brutto, inv.vatRate);
+    return nettoH + vatH * 0.5;
+  }
+  if(inv.vatManual && typeof inv.vatAmount==='number') return inv.brutto - inv.vatAmount;
+  return calcN(inv.brutto, inv.vatRate);
 }
 
 // === ROLE MANAGEMENT ===
@@ -2181,7 +2226,7 @@ function renderVATForecast(){
   var totalVat=0;
   COS.forEach(function(c){
     var qInvs=invs.filter(function(i){return i.company===c.id&&i.date&&qMonths.some(function(m){return i.date.indexOf(selYear+'-'+m)===0;});});
-    var vI=qInvs.filter(function(i){return i.type==='sale';}).reduce(function(a,i){return a+calcV(i.brutto,i.vatRate);},0);
+    var vI=qInvs.filter(function(i){return i.type==='sale';}).reduce(function(a,i){return a+vatInv(i);},0);
     var vO=qInvs.filter(function(i){return i.type==='buy';}).reduce(function(a,i){return a+calcVatForInv(i);},0);
     var vatDue=vI-vO;
     totalVat+=vatDue;

@@ -1450,7 +1450,7 @@ function refreshComp(){
   var n=calcN(pending.brutto,pending.vatRate),v=calcV(pending.brutto,pending.vatRate);
   var isEUR=pending.currency!=='PLN';
   el2.innerHTML=(isEUR?'<span>Oryginal: <b>'+(pending.bruttoOrig||pending.brutto).toFixed(2)+' '+pending.currency+'</b></span>':'')+'<span>Netto: <b>'+fmt(n)+'</b></span><span>VAT: <b>'+fmt(v)+'</b></span><span>Brutto PLN: <b>'+fmt(pending.brutto)+'</b></span>';
-  var pb=g('pbrutto');if(pb)pb.value=pending.brutto.toFixed(2);
+  var pb=g('pbrutto');if(pb && document.activeElement!==pb)pb.value=pending.brutto.toFixed(2);
 }
 function saveInv(){
   if(!pending||pending.brutto===undefined||pending.brutto===null||pending.brutto===0){alert('Podaj kwote brutto!');return;}

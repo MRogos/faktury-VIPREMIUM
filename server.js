@@ -650,14 +650,25 @@ app.get('/api/ksef/detail', requireAuth, async (req, res) => {
     const r = await pool.query('SELECT * FROM ksef_inbox WHERE ksef_number=$1', [ksefNumber]);
     const it = r.rows[0];
     if (!it) return res.status(404).json({ error: 'Brak zapisanych danych KSeF dla tej faktury' });
+    // Pelne dane z ponownego parsowania XML (do widoku dokumentu faktury)
+    let p = {};
+    try { p = parseFA3(it.xml_raw || ''); } catch (e) { p = {}; }
     res.json({
-      ksefNumber: it.ksef_number, num: it.invoice_no, date: it.issue_date,
-      sellerNip: it.seller_nip, seller: it.seller_name, sellerAddr: it.seller_address,
-      netto: it.net_amount != null ? parseFloat(it.net_amount) : 0,
-      vat: it.vat_amount != null ? parseFloat(it.vat_amount) : 0,
-      brutto: it.gross_amount != null ? parseFloat(it.gross_amount) : 0,
-      currency: it.currency || 'PLN',
-      items: (() => { try { return JSON.parse(it.items_json || '[]'); } catch (e) { return []; } })(),
+      ksefNumber: it.ksef_number,
+      num: p.numer || it.invoice_no,
+      date: p.dataWystawienia || it.issue_date,
+      saleDate: p.dataSprzedazy || null,
+      sellerNip: p.sprzedawcaNip || it.seller_nip,
+      seller: p.sprzedawcaNazwa || it.seller_name,
+      sellerAddr: p.sprzedawcaAdres || it.seller_address,
+      buyerNip: p.nabywcaNip || null,
+      buyer: p.nabywcaNazwa || null,
+      rodzaj: p.rodzaj || null,
+      netto: p.netto != null ? p.netto : (it.net_amount != null ? parseFloat(it.net_amount) : 0),
+      vat: p.vat != null ? p.vat : (it.vat_amount != null ? parseFloat(it.vat_amount) : 0),
+      brutto: p.brutto != null ? p.brutto : (it.gross_amount != null ? parseFloat(it.gross_amount) : 0),
+      currency: p.waluta || it.currency || 'PLN',
+      items: (p.pozycje && p.pozycje.length) ? p.pozycje : (() => { try { return JSON.parse(it.items_json || '[]'); } catch (e) { return []; } })(),
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

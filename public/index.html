@@ -688,7 +688,9 @@ function ksefItemHtml(it){
   h+='<button class="prim" onclick="ksefBook('+it.id+')">Zaksięguj</button>';
   h+='<button class="sm del" onclick="ksefDiscard('+it.id+')">Odrzuć</button>';
   h+='</div>';
-  h+='<div id="kveh-'+it.id+'" style="display:none;margin-top:8px;padding:8px;background:var(--bg3);border-radius:8px"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">'
+  h+='<div id="kveh-'+it.id+'" style="display:none;margin-top:8px;padding:8px;background:var(--bg3);border-radius:8px">'
+    +'<div style="display:flex;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)"><button class="sm prim" onclick="ksefVehAll('+it.id+',true)">✓ Wszystkie auta</button><button class="sm" onclick="ksefVehAll('+it.id+',false)">Wyczyść</button></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">'
     +FLEET.map(function(v){return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" value="'+v+'"'+(a.vehicles.indexOf(v)>=0?' checked':'')+' onchange="ksefVehToggle('+it.id+',&quot;'+v+'&quot;,this.checked)" style="width:14px;height:14px;flex:0 0 auto;accent-color:var(--accent)">'+v+'</label>';}).join('')
     +'</div></div>';
   h+='<div id="kdet-'+it.id+'" style="display:none;margin-top:8px"></div>';
@@ -748,6 +750,12 @@ function ksefVehToggle(id,v,on){
   var i=a.vehicles.indexOf(v);
   if(on&&i<0)a.vehicles.push(v);
   if(!on&&i>=0)a.vehicles.splice(i,1);
+}
+function ksefVehAll(id,on){
+  var a=_ksefAssign[id]||(_ksefAssign[id]={costCat:'fuel',vehicles:[]});
+  a.vehicles = on ? FLEET.slice() : [];
+  var box=g('kveh-'+id);
+  if(box){Array.prototype.forEach.call(box.querySelectorAll('input[type=checkbox]'),function(cb){cb.checked=on;});}
 }
 function ksefBook(id){
   var a=_ksefAssign[id]||{costCat:'other',vehicles:[]};
@@ -2792,33 +2800,80 @@ function ksefNumberOf(i){return isKsefInv(i)?i.note.replace(/^KSeF:\s*/,'').trim
 
 function ksefDetailHtml(d){
   function stawkaNum(s){var m=String(s||'').match(/-?\d+([.,]\d+)?/);return m?parseFloat(m[0].replace(',','.')):0;}
+  function krajNazwa(c){var m={PL:'Polska',DE:'Niemcy',NL:'Holandia',BE:'Belgia',FR:'Francja',GB:'Wielka Brytania',CZ:'Czechy',SK:'Słowacja',LT:'Litwa',IT:'Włochy',ES:'Hiszpania',AT:'Austria'};return c?(m[c]||c):null;}
   var MONO='ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
   var cur=(d.currency&&d.currency!=='PLN')?(' '+d.currency):'';
-  var hasIlosc=(d.items||[]).some(function(p){return p.ilosc||p.cena;});
-  var colspan=hasIlosc?8:6;
+
+  function strona(tytul,nazwa,nip,adres,krajKod){
+    var h='<div style="flex:1;min-width:240px"><div style="font-size:15px;font-weight:600;margin-bottom:8px">'+tytul+'</div>';
+    if(krajNazwa(krajKod))h+='<div style="font-size:12px;color:#374151">Prefiks VAT: <b>'+krajNazwa(krajKod)+'</b></div>';
+    if(nip)h+='<div style="font-size:12px;color:#374151">NIP: <b>'+nip+'</b></div>';
+    h+='<div style="font-size:12px;color:#374151">Nazwa: <b>'+esc(nazwa||'—')+'</b></div>';
+    if(adres)h+='<div style="margin-top:8px;font-size:11px;color:#6b7280;font-weight:600">Adres</div><div style="font-size:12px;color:#374151;white-space:pre-line">'+esc(adres)+(krajNazwa(krajKod)?'\n'+krajNazwa(krajKod).toUpperCase():'')+'</div>';
+    return h+'</div>';
+  }
+
+  // pozycje
   var rows='';
   (d.items||[]).forEach(function(p,idx){
-    var st=stawkaNum(p.stawka), netto=p.netto||0, vatv=netto*st/100, brutto=netto+vatv;
+    var st=stawkaNum(p.stawka), netto=p.netto||0, vatv=netto*st/100, brutto=p.wartoscBrutto!=null?p.wartoscBrutto:(netto+vatv);
     var stLabel=(p.stawka!=null&&p.stawka!=='')?(String(p.stawka)+(/^\d+$/.test(String(p.stawka))?'%':'')):'—';
-    rows+='<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:6px 8px">'+(idx+1)+'</td><td style="padding:6px 8px">'+esc(p.nazwa||'')+'</td>';
-    if(hasIlosc){rows+='<td style="padding:6px 8px;text-align:right">'+(p.ilosc!=null?p.ilosc+(p.jednostka?' '+esc(p.jednostka):''):'—')+'</td><td style="padding:6px 8px;text-align:right">'+(p.cena!=null?fmt(p.cena):'—')+'</td>';}
-    rows+='<td style="padding:6px 8px;text-align:right">'+fmt(netto)+'</td><td style="padding:6px 8px;text-align:center">'+stLabel+'</td><td style="padding:6px 8px;text-align:right">'+fmt(vatv)+'</td><td style="padding:6px 8px;text-align:right;font-weight:600">'+fmt(brutto)+'</td></tr>';
+    rows+='<tr style="border-bottom:1px solid #e5e7eb">'
+      +'<td style="padding:6px 8px">'+(idx+1)+'</td>'
+      +'<td style="padding:6px 8px">'+esc(p.nazwa||'')+'</td>'
+      +'<td style="padding:6px 8px;text-align:right">'+(p.ilosc!=null?p.ilosc:'—')+'</td>'
+      +'<td style="padding:6px 8px;text-align:center">'+(p.jednostka?esc(p.jednostka):'—')+'</td>'
+      +'<td style="padding:6px 8px;text-align:right">'+(p.cena!=null?fmt(p.cena):'—')+'</td>'
+      +'<td style="padding:6px 8px;text-align:right">'+fmt(netto)+'</td>'
+      +'<td style="padding:6px 8px;text-align:center">'+stLabel+'</td>'
+      +'<td style="padding:6px 8px;text-align:right">'+fmt(vatv)+'</td>'
+      +'<td style="padding:6px 8px;text-align:right;font-weight:600">'+fmt(brutto)+'</td></tr>';
   });
-  var h='<div style="background:#fff;max-width:820px;margin:8px auto;padding:28px 32px;color:#111;font-size:12px;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1)">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px">';
-  h+='<div><div style="font-size:22px;font-weight:800;letter-spacing:.02em">FAKTURA</div><div style="margin-top:2px">Nr <b>'+esc(d.num||'—')+'</b></div>'+(d.rodzaj?'<div style="font-size:10px;color:#666">Rodzaj: '+esc(d.rodzaj)+'</div>':'')+'</div>';
-  h+='<div style="text-align:right;font-size:11px;line-height:1.6"><div>Data wystawienia: <b>'+(d.date||'—')+'</b></div>'+(d.saleDate?'<div>Data sprzedaży: <b>'+d.saleDate+'</b></div>':'')+(d.terminPlatnosci?'<div>Termin płatności: <b>'+d.terminPlatnosci+'</b></div>':'')+'<div style="margin-top:4px;color:#666">Nr KSeF</div><div style="font-family:'+MONO+';font-size:10px;word-break:break-all;max-width:240px">'+(d.ksefNumber||'')+'</div></div>';
+
+  // dodatkowe informacje (Flotex/Orlen) - pogrupowane po nr wiersza
+  var dodHtml='';
+  if(d.dodatkowe&&d.dodatkowe.length){
+    var grupy={};
+    d.dodatkowe.forEach(function(x){var k=x.nr||'_';(grupy[k]=grupy[k]||[]).push(x);});
+    dodHtml+='<div style="margin-top:22px"><div style="font-size:15px;font-weight:600;margin-bottom:8px">Dodatkowe informacje</div>';
+    Object.keys(grupy).forEach(function(k){
+      if(k!=='_')dodHtml+='<div style="font-size:11px;font-weight:700;color:#6b7280;margin:8px 0 2px">Pozycja '+k+'</div>';
+      dodHtml+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+      grupy[k].forEach(function(x){dodHtml+='<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:4px 8px;color:#6b7280;width:40%;vertical-align:top">'+esc(x.klucz||'')+'</td><td style="padding:4px 8px">'+esc(x.wartosc||'')+'</td></tr>';});
+      dodHtml+='</table>';
+    });
+    dodHtml+='</div>';
+  }
+
+  var h='<div style="background:#fff;max-width:860px;margin:8px auto;padding:32px 36px;color:#1f2937;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1)">';
+  // naglowek KSeF
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">';
+  h+='<div style="font-size:24px;font-weight:600;color:#1f2937">Krajowy System <span style="color:#dc2626;font-weight:700">e-Faktur</span></div>';
+  h+='<div style="text-align:right"><div style="font-size:12px;color:#6b7280">Numer faktury</div><div style="font-size:22px;font-weight:700">'+esc(d.num||'—')+'</div><div style="font-size:12px;color:#6b7280">'+(d.rodzaj?('Faktura '+esc(d.rodzaj==='VAT'?'podstawowa':d.rodzaj)):'Faktura')+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px">Numer KSeF: <span style="font-family:'+MONO+'">'+(d.ksefNumber||'')+'</span></div></div>';
+  h+='</div><div style="border-top:1px solid #e5e7eb;margin-bottom:18px"></div>';
+  // strony
+  h+='<div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:20px">';
+  h+=strona('Sprzedawca',d.seller,d.sellerNip,d.sellerAddr,d.sellerKraj);
+  h+=strona('Nabywca',d.buyer,d.buyerNip,d.buyerAddr,d.buyerKraj);
+  h+='</div><div style="border-top:1px solid #e5e7eb;margin-bottom:18px"></div>';
+  // szczegoly
+  h+='<div style="font-size:15px;font-weight:600;margin-bottom:8px">Szczegóły</div>';
+  h+='<div style="display:flex;gap:32px;flex-wrap:wrap;font-size:12px;color:#374151;margin-bottom:6px">';
+  h+='<div style="flex:1;min-width:240px">Data wystawienia: <b>'+(d.date||'—')+'</b></div>';
+  h+='<div style="flex:1;min-width:240px">Data dokonania/zakończenia dostawy: <b>'+(d.saleDate||d.date||'—')+'</b></div>';
   h+='</div>';
-  h+='<div style="display:flex;gap:24px;margin-bottom:18px;flex-wrap:wrap">';
-  h+='<div style="flex:1;min-width:220px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px"><div style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.05em">SPRZEDAWCA</div><div style="font-weight:700;margin-top:4px">'+esc(d.seller||'—')+'</div>'+(d.sellerNip?'<div>NIP: '+d.sellerNip+'</div>':'')+(d.sellerAddr?'<div style="color:#4b5563">'+esc(d.sellerAddr)+'</div>':'')+'</div>';
-  h+='<div style="flex:1;min-width:220px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px"><div style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.05em">NABYWCA</div><div style="font-weight:700;margin-top:4px">'+esc(d.buyer||'—')+'</div>'+(d.buyerNip?'<div>NIP: '+d.buyerNip+'</div>':'')+(d.buyerAddr?'<div style="color:#4b5563">'+esc(d.buyerAddr)+'</div>':'')+'</div>';
-  h+='</div>';
-  h+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#111;color:#fff"><th style="padding:6px 8px;text-align:left">Lp</th><th style="padding:6px 8px;text-align:left">Nazwa</th>'+(hasIlosc?'<th style="padding:6px 8px;text-align:right">Ilość</th><th style="padding:6px 8px;text-align:right">Cena netto</th>':'')+'<th style="padding:6px 8px;text-align:right">Netto</th><th style="padding:6px 8px;text-align:center">VAT</th><th style="padding:6px 8px;text-align:right">Kwota VAT</th><th style="padding:6px 8px;text-align:right">Brutto</th></tr></thead><tbody>'+(rows||'<tr><td colspan="'+colspan+'" style="padding:10px;text-align:center;color:#999">Brak pozycji w XML</td></tr>')+'</tbody></table>';
-  h+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:16px;flex-wrap:wrap;gap:16px">';
-  h+='<div style="font-size:11px;color:#4b5563;line-height:1.7">'+(d.formaPlatnosci?'<div>Forma płatności: <b>'+esc(String(d.formaPlatnosci))+'</b></div>':'')+(d.rachunek?'<div>Nr konta: <span style="font-family:'+MONO+'">'+esc(d.rachunek)+'</span></div>':'')+'</div>';
-  h+='<table style="font-size:12px"><tr><td style="padding:3px 12px;text-align:right;color:#6b7280">Razem netto:</td><td style="padding:3px 0;text-align:right;font-weight:600;min-width:120px">'+fmt(d.netto)+cur+'</td></tr><tr><td style="padding:3px 12px;text-align:right;color:#6b7280">VAT:</td><td style="padding:3px 0;text-align:right;font-weight:600">'+fmt(d.vat)+cur+'</td></tr><tr style="border-top:2px solid #111"><td style="padding:6px 12px;text-align:right;font-weight:700;font-size:14px">Do zapłaty:</td><td style="padding:6px 0;text-align:right;font-weight:800;font-size:14px">'+fmt(d.brutto)+cur+'</td></tr></table>';
-  h+='</div>';
-  h+='<div style="margin-top:18px;padding-top:10px;border-top:1px dashed #d1d5db;font-size:10px;color:#9ca3af;text-align:center">Dokument pobrany z Krajowego Systemu e-Faktur (KSeF) · Nr KSeF: '+(d.ksefNumber||'')+'</div>';
+  if(d.terminPlatnosci||d.formaPlatnosci||d.rachunek){
+    h+='<div style="font-size:12px;color:#374151">'+(d.terminPlatnosci?'Termin płatności: <b>'+d.terminPlatnosci+'</b>&nbsp;&nbsp;':'')+(d.formaPlatnosci?'Forma płatności: <b>'+esc(String(d.formaPlatnosci))+'</b>&nbsp;&nbsp;':'')+(d.rachunek?'Nr konta: <span style="font-family:'+MONO+'">'+esc(d.rachunek)+'</span>':'')+'</div>';
+  }
+  h+='<div style="border-top:1px solid #e5e7eb;margin:18px 0"></div>';
+  // pozycje
+  h+='<div style="font-size:15px;font-weight:600;margin-bottom:8px">Pozycje</div><div style="font-size:11px;color:#6b7280;margin-bottom:8px">Faktura w walucie '+(d.currency||'PLN')+'</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f3f4f6;color:#374151;text-align:left"><th style="padding:6px 8px">Lp</th><th style="padding:6px 8px">Nazwa towaru lub usługi</th><th style="padding:6px 8px;text-align:right">Ilość</th><th style="padding:6px 8px;text-align:center">Miara</th><th style="padding:6px 8px;text-align:right">Cena netto</th><th style="padding:6px 8px;text-align:right">Netto</th><th style="padding:6px 8px;text-align:center">Stawka</th><th style="padding:6px 8px;text-align:right">Kwota VAT</th><th style="padding:6px 8px;text-align:right">Brutto</th></tr></thead><tbody>'+(rows||'<tr><td colspan="9" style="padding:10px;text-align:center;color:#999">Brak pozycji w XML</td></tr>')+'</tbody></table></div>';
+  // podsumowanie
+  h+='<div style="display:flex;justify-content:flex-end;margin-top:16px"><table style="font-size:12px"><tr><td style="padding:3px 12px;text-align:right;color:#6b7280">Razem netto:</td><td style="padding:3px 0;text-align:right;font-weight:600;min-width:130px">'+fmt(d.netto)+cur+'</td></tr><tr><td style="padding:3px 12px;text-align:right;color:#6b7280">VAT:</td><td style="padding:3px 0;text-align:right;font-weight:600">'+fmt(d.vat)+cur+'</td></tr><tr style="border-top:2px solid #111"><td style="padding:6px 12px;text-align:right;font-weight:700;font-size:14px">Do zapłaty:</td><td style="padding:6px 0;text-align:right;font-weight:800;font-size:14px">'+fmt(d.brutto)+cur+'</td></tr></table></div>';
+  // dodatkowe (Flotex)
+  h+=dodHtml;
+  h+='<div style="margin-top:20px;padding-top:10px;border-top:1px dashed #d1d5db;font-size:10px;color:#9ca3af;text-align:center">Wizualizacja e-faktury z Krajowego Systemu e-Faktur (KSeF) · Nr KSeF: '+(d.ksefNumber||'')+'</div>';
   h+='</div>';
   return h;
 }

@@ -61,11 +61,21 @@ function parseFA3(xml) {
     ilosc: num(tag(w, 'P_8B')) || null,
     jednostka: tag(w, 'P_8A') || '',
     cena: num(tag(w, 'P_9A')) || null,
+    cenaBrutto: num(tag(w, 'P_9B')) || null,
     netto: num(tag(w, 'P_11')),
+    wartoscBrutto: num(tag(w, 'P_11A')) || null,
     stawka: tag(w, 'P_12') || '',
   }));
 
+  // Dodatkowy opis (tu Orlen/Flotex wrzuca szczegoly per karta/pojazd)
+  const dodatkowe = tagAll(fa, 'DodatkowyOpis').map((b) => ({
+    nr: tag(b, 'NrWiersza'),
+    klucz: tag(b, 'Klucz'),
+    wartosc: tag(b, 'Wartosc'),
+  })).filter((x) => x.klucz || x.wartosc);
+
   const adresLinie = (a) => [tag(a, 'AdresL1'), tag(a, 'AdresL2')].filter(Boolean).join(', ');
+  const kraj = (a) => tag(a, 'KodKraju');
 
   return {
     numer: tag(fa, 'P_2'),
@@ -78,13 +88,16 @@ function parseFA3(xml) {
     sprzedawcaNip: tag(p1Ident, 'NIP'),
     sprzedawcaNazwa: tag(p1Ident, 'Nazwa') || tag(p1Ident, 'PelnaNazwa'),
     sprzedawcaAdres: adresLinie(p1Adres) || tag(p1Adres, 'AdresL1'),
+    sprzedawcaKraj: kraj(p1Adres),
     nabywcaNip: tag(p2Ident, 'NIP'),
     nabywcaNazwa: tag(p2Ident, 'Nazwa') || tag(p2Ident, 'PelnaNazwa'),
     nabywcaAdres: adresLinie(p2Adres) || tag(p2Adres, 'AdresL1'),
+    nabywcaKraj: kraj(p2Adres),
     netto,
     vat,
     brutto: brutto || (netto + vat),
     pozycje,
+    dodatkowe,
     rodzaj: tag(fa, 'RodzajFaktury'),
   };
 }

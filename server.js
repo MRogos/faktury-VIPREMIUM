@@ -150,6 +150,7 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    await pool.query("ALTER TABLE ksef_inbox ADD COLUMN IF NOT EXISTS maybe_dup BOOLEAN DEFAULT FALSE");
     console.log('DB ready');
   } catch (e) {
     console.error('DB init error:', e.message);
@@ -551,12 +552,22 @@ app.post('/api/ksef/pull', requireAuth, async (req, res) => {
       try {
         const p = parseFA3(f.xml);
         const numerKsef = f.nazwa.replace(/\.xml$/i, '').split('/').pop() || f.nazwa;
+        // Czy ta sama faktura KSeF juz zaksiegowana? (to samo id 'ksef'+nr) -> pomijamy
+        const ksefId = 'ksef' + String(numerKsef).replace(/[^a-zA-Z0-9]/g, '');
+        const exId = await pool.query('SELECT 1 FROM invoices WHERE id=$1 LIMIT 1', [ksefId]);
+        if (exId.rows.length) { duplikaty++; continue; }
+        // Czy istnieje faktura o tym numerze dla tej firmy (np. dodana recznie)? -> flaga ostrzegawcza
+        let maybeDup = false;
+        if (p.numer) {
+          const exNum = await pool.query('SELECT 1 FROM invoices WHERE company=$1 AND lower(num)=lower($2) LIMIT 1', [company, p.numer]);
+          maybeDup = exNum.rows.length > 0;
+        }
         try {
           await pool.query(
-            `INSERT INTO ksef_inbox (company,ksef_number,invoice_no,issue_date,seller_nip,seller_name,seller_address,net_amount,vat_amount,gross_amount,currency,items_json,xml_raw,status)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'new')`,
+            `INSERT INTO ksef_inbox (company,ksef_number,invoice_no,issue_date,seller_nip,seller_name,seller_address,net_amount,vat_amount,gross_amount,currency,items_json,xml_raw,status,maybe_dup)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'new',$14)`,
             [company, numerKsef, p.numer, p.dataWystawienia, p.sprzedawcaNip, p.sprzedawcaNazwa, p.sprzedawcaAdres,
-             p.netto, p.vat, p.brutto, p.waluta, JSON.stringify(p.pozycje || []), f.xml]
+             p.netto, p.vat, p.brutto, p.waluta, JSON.stringify(p.pozycje || []), f.xml, maybeDup]
           );
           nowe++;
         } catch (insErr) {
@@ -574,7 +585,7 @@ app.get('/api/ksef/inbox', requireAuth, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, company, ksef_number, invoice_no, issue_date, seller_nip, seller_name, seller_address,
-              net_amount, vat_amount, gross_amount, currency, items_json
+              net_amount, vat_amount, gross_amount, currency, items_json, maybe_dup
        FROM ksef_inbox WHERE status='new' ORDER BY issue_date DESC, id DESC`
     );
     res.json(r.rows.map(x => ({
@@ -584,6 +595,7 @@ app.get('/api/ksef/inbox', requireAuth, async (req, res) => {
       vat: x.vat_amount != null ? parseFloat(x.vat_amount) : 0,
       brutto: x.gross_amount != null ? parseFloat(x.gross_amount) : 0,
       currency: x.currency || 'PLN',
+      maybeDup: !!x.maybe_dup,
       items: (() => { try { return JSON.parse(x.items_json || '[]'); } catch (e) { return []; } })(),
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -615,6 +627,14 @@ app.post('/api/ksef/inbox/:id/book', requireAuth, async (req, res) => {
 });
 
 // Odrzuc pozycje z poczekalni (nie ksiegujemy)
+// Wyczysc cala poczekalnie (tylko niezaksiegowane 'new') - mozna pobrac ponownie
+app.delete('/api/ksef/inbox', requireAuth, async (req, res) => {
+  try {
+    const r = await pool.query("DELETE FROM ksef_inbox WHERE status='new'");
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/ksef/inbox/:id', requireAuth, async (req, res) => {
   try {
     await pool.query("UPDATE ksef_inbox SET status='discarded' WHERE id=$1", [req.params.id]);

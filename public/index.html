@@ -757,10 +757,16 @@ function ksefVehAll(id,on){
   var box=g('kveh-'+id);
   if(box){Array.prototype.forEach.call(box.querySelectorAll('input[type=checkbox]'),function(cb){cb.checked=on;});}
 }
-function ksefBook(id){
+function ksefBook(id,force){
   var a=_ksefAssign[id]||{costCat:'other',vehicles:[]};
-  fetch('/api/ksef/inbox/'+id+'/book',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({costCat:a.costCat,vehicles:a.vehicles})})
-  .then(function(r){return r.json();}).then(function(d){
+  fetch('/api/ksef/inbox/'+id+'/book',{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':tok()},body:JSON.stringify({costCat:a.costCat,vehicles:a.vehicles,force:!!force})})
+  .then(function(r){return r.json().then(function(d){return {status:r.status,d:d};});}).then(function(res){
+    var d=res.d;
+    if(res.status===409&&d.duplikat){
+      if(confirm('⚠ '+d.error+'.\n\nZaksięgować mimo to (powstanie druga pozycja)?\nOK = księguj mimo to · Anuluj = zostaw w poczekalni'))
+        ksefBook(id,true);
+      return;
+    }
     if(d.error){alert('Błąd: '+d.error);return;}
     delete _ksefAssign[id]; loadInvs(); renderKsef();
   }).catch(function(e){alert('Błąd: '+e.message);});
@@ -906,8 +912,10 @@ function renderLedger(){
   g('ltable').innerHTML=html;
 }
 
+function normNum(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
 function buildTable(rows,title,color,isCosts,secKey,defOpen){
   if(!rows.length)return '';
+  var _dupC={};invs.forEach(function(x){if(!x.num)return;var k=x.company+'|'+normNum(x.num);_dupC[k]=(_dupC[k]||0)+1;});
   var total=rows.reduce(function(a,i){return a+(i.brutto||0);},0);
   var collaps=!!secKey;
   var isOpen=collaps?(expF[secKey]===undefined?(defOpen!==false):expF[secKey]!==false):true;
@@ -983,6 +991,7 @@ function buildTable(rows,title,color,isCosts,secKey,defOpen){
     h+='<span style="font-weight:700;font-size:13px;color:var(--text)">'+(i.num||'—')+'</span>';
     if(i.attachmentUrl){h+='<span title="Kliknij fakturę aby zobaczyć załącznik" style="font-size:11px;color:#2563eb">📎</span>';}
     if(isKsefInv(i)){h+='<span title="Faktura z KSeF — kliknij aby zobaczyć pozycje" style="font-size:11px;color:#f59e0b">📄</span>';}
+    if(i.num&&_dupC[i.company+'|'+normNum(i.num)]>1){h+='<span title="Inna faktura ma ten sam numer w tej firmie — możliwy duplikat" style="font-size:10px;font-weight:700;color:#dc2626;background:#fee2e2;padding:1px 6px;border-radius:20px">⚠ duplikat</span>';}
     h+='<span style="font-size:11px;color:var(--muted)">'+(co?co.short:'')+'</span>';
     h+='<span style="font-size:11px;color:var(--muted)">'+( i.date||'')+'</span>';
     if(i.type==='buy'&&_cat){h+='<span style="font-size:10px;background:var(--bg3);border:1px solid var(--border);padding:1px 6px;border-radius:999px;color:var(--muted)">'+_cat.label+'</span>';}

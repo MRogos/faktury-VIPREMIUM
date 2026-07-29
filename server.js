@@ -614,6 +614,17 @@ app.post('/api/ksef/inbox/:id/book', requireAuth, async (req, res) => {
     const net = Number(it.net_amount) || 0, vat = Number(it.vat_amount) || 0, gross = Number(it.gross_amount) || 0;
     const vatRate = net > 0 ? Math.round(vat / net * 100) : 23;
     const invId = 'ksef' + String(it.ksef_number || id).replace(/[^a-zA-Z0-9]/g, '');
+    // Ochrona przed duplikatem: faktura o tym numerze juz jest w ksiegach (np. dodana recznie)
+    const force = req.body.force === true;
+    if (!force && it.invoice_no) {
+      const dup = await pool.query(
+        "SELECT id, num FROM invoices WHERE company=$1 AND id<>$2 AND regexp_replace(lower(num),'[^a-z0-9]','','g') = regexp_replace(lower($3),'[^a-z0-9]','','g') LIMIT 1",
+        [it.company, invId, it.invoice_no]
+      );
+      if (dup.rows.length) {
+        return res.status(409).json({ error: 'Faktura o numerze ' + (dup.rows[0].num || it.invoice_no) + ' już jest w księgach', duplikat: true, num: dup.rows[0].num || it.invoice_no });
+      }
+    }
     await pool.query(
       `INSERT INTO invoices (id,company,type,num,date,contractor,brutto,vat_rate,currency,cost_cat,vehicles,vat_amount,vat_manual,note,confidence)
        VALUES ($1,$2,'buy',$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12,'ksef')

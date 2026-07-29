@@ -658,11 +658,15 @@ app.get('/api/ksef/detail', requireAuth, async (req, res) => {
       num: p.numer || it.invoice_no,
       date: p.dataWystawienia || it.issue_date,
       saleDate: p.dataSprzedazy || null,
+      terminPlatnosci: p.terminPlatnosci || null,
+      rachunek: p.rachunek || null,
+      formaPlatnosci: p.formaPlatnosci || null,
       sellerNip: p.sprzedawcaNip || it.seller_nip,
       seller: p.sprzedawcaNazwa || it.seller_name,
       sellerAddr: p.sprzedawcaAdres || it.seller_address,
       buyerNip: p.nabywcaNip || null,
       buyer: p.nabywcaNazwa || null,
+      buyerAddr: p.nabywcaAdres || null,
       rodzaj: p.rodzaj || null,
       netto: p.netto != null ? p.netto : (it.net_amount != null ? parseFloat(it.net_amount) : 0),
       vat: p.vat != null ? p.vat : (it.vat_amount != null ? parseFloat(it.vat_amount) : 0),
@@ -670,6 +674,20 @@ app.get('/api/ksef/detail', requireAuth, async (req, res) => {
       currency: p.waluta || it.currency || 'PLN',
       items: (p.pozycje && p.pozycje.length) ? p.pozycje : (() => { try { return JSON.parse(it.items_json || '[]'); } catch (e) { return []; } })(),
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Surowy XML faktury z KSeF (do pobrania) - oryginalny plik e-faktury
+app.get('/api/ksef/xml', requireAuth, async (req, res) => {
+  try {
+    const ksefNumber = (req.query.ksef || '').trim();
+    if (!ksefNumber) return res.status(400).json({ error: 'Brak numeru KSeF' });
+    const r = await pool.query('SELECT xml_raw FROM ksef_inbox WHERE ksef_number=$1', [ksefNumber]);
+    const it = r.rows[0];
+    if (!it || !it.xml_raw) return res.status(404).json({ error: 'Brak XML dla tej faktury' });
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + ksefNumber.replace(/[^a-zA-Z0-9._-]/g, '_') + '.xml"');
+    res.send(it.xml_raw);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

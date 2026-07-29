@@ -40,8 +40,12 @@ function parseFA3(xml) {
   const p1Ident = block(p1, 'DaneIdentyfikacyjne') || p1;
   const p2Ident = block(p2, 'DaneIdentyfikacyjne') || p2;
   const p1Adres = block(p1, 'Adres') || '';
+  const p2Adres = block(p2, 'Adres') || '';
 
   const fa = block(xml, 'Fa') || xml;
+  const platn = block(fa, 'Platnosc') || '';
+  const termin = block(platn, 'TerminPlatnosci') || '';
+  const rb = block(platn, 'RachunekBankowy') || '';
 
   let netto = 0, vat = 0;
   for (let i = 1; i <= 11; i++) {
@@ -54,20 +58,29 @@ function parseFA3(xml) {
   const wiersze = tagAll(fa, 'FaWiersz');
   const pozycje = wiersze.map((w) => ({
     nazwa: tag(w, 'P_7') || '',
+    ilosc: num(tag(w, 'P_8B')) || null,
+    jednostka: tag(w, 'P_8A') || '',
+    cena: num(tag(w, 'P_9A')) || null,
     netto: num(tag(w, 'P_11')),
     stawka: tag(w, 'P_12') || '',
   }));
+
+  const adresLinie = (a) => [tag(a, 'AdresL1'), tag(a, 'AdresL2')].filter(Boolean).join(', ');
 
   return {
     numer: tag(fa, 'P_2'),
     dataWystawienia: tag(fa, 'P_1'),
     dataSprzedazy: tag(fa, 'P_6'),
+    terminPlatnosci: tag(termin, 'Termin') || tag(fa, 'TerminPlatnosci') || null,
+    rachunek: tag(rb, 'NrRB') || null,
+    formaPlatnosci: tag(platn, 'FormaPlatnosci') || null,
     waluta: tag(fa, 'KodWaluty') || 'PLN',
     sprzedawcaNip: tag(p1Ident, 'NIP'),
     sprzedawcaNazwa: tag(p1Ident, 'Nazwa') || tag(p1Ident, 'PelnaNazwa'),
-    sprzedawcaAdres: tag(p1Adres, 'AdresL1'),
+    sprzedawcaAdres: adresLinie(p1Adres) || tag(p1Adres, 'AdresL1'),
     nabywcaNip: tag(p2Ident, 'NIP'),
     nabywcaNazwa: tag(p2Ident, 'Nazwa') || tag(p2Ident, 'PelnaNazwa'),
+    nabywcaAdres: adresLinie(p2Adres) || tag(p2Adres, 'AdresL1'),
     netto,
     vat,
     brutto: brutto || (netto + vat),

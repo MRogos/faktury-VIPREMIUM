@@ -644,21 +644,28 @@ function drawKsef(){
   if(!_ksefInbox.length){
     h+='<div class="empty" style="padding:24px">Brak faktur w poczekalni. Pobierz paczkę powyżej.</div>';
   } else {
+    // Kafle firm (jak u góry) — klik rozwija listę pod spodem
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:16px">';
     ['pt','et','vr'].forEach(function(c){
       var items=_ksefInbox.filter(function(x){return x.company===c;});
       if(!items.length)return;
-      var open=_ksefOpen[c]!==false;
+      var open=_ksefOpen[c]===true;
       var suma=items.reduce(function(s,i){return s+(i.brutto||0);},0);
-      h+='<div style="border:1px solid var(--border);border-left:4px solid '+coColor(c)+';border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow)">';
-      h+='<div onclick="ksefToggleGroup(&quot;'+c+'&quot;)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--bg3);cursor:pointer">';
-      h+='<span style="font-weight:700;font-size:14px;color:'+coColor(c)+'">'+coName(c)+' <span style="opacity:.6;font-weight:400;font-size:12px">('+items.length+')</span></span>';
-      h+='<span style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--mono);font-weight:700;font-size:13px">'+fmt(suma)+'</span><span style="color:'+coColor(c)+';font-size:12px">'+(open?'▲ zwiń':'▼ rozwiń')+'</span></span>';
+      h+='<div onclick="ksefToggleGroup(&quot;'+c+'&quot;)" style="cursor:pointer;background:'+(open?coColor(c):'#fff')+';border:2px solid '+coColor(c)+';border-radius:10px;padding:16px;box-shadow:var(--shadow);transition:all .12s">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-weight:700;font-size:15px;color:'+(open?'#fff':coColor(c))+'">'+coName(c)+'</span><span style="font-size:11px;color:'+(open?'rgba(255,255,255,.9)':'var(--muted)')+'">'+items.length+' fakt.</span></div>';
+      h+='<div style="font-family:var(--mono);font-size:19px;font-weight:700;color:'+(open?'#fff':'var(--text)')+'">'+fmt(suma)+'</div>';
+      h+='<div style="font-size:11px;margin-top:4px;color:'+(open?'rgba(255,255,255,.85)':coColor(c))+'">'+(open?'▲ kliknij aby zwinąć':'▼ kliknij aby rozwinąć')+'</div>';
       h+='</div>';
-      if(open){
-        h+='<div style="padding:10px 12px;background:#fff">';
-        items.forEach(function(it){h+=ksefItemHtml(it);});
-        h+='</div>';
-      }
+    });
+    h+='</div>';
+    // Rozwinięte listy (pełna szerokość) dla otwartych firm
+    ['pt','et','vr'].forEach(function(c){
+      if(_ksefOpen[c]!==true)return;
+      var items=_ksefInbox.filter(function(x){return x.company===c;});
+      if(!items.length)return;
+      h+='<div style="border-left:4px solid '+coColor(c)+';padding-left:12px;margin-bottom:16px">';
+      h+='<div style="font-weight:700;font-size:14px;color:'+coColor(c)+';margin-bottom:10px">'+coName(c)+' — '+items.length+' faktur do przypisania</div>';
+      items.forEach(function(it){h+=ksefItemHtml(it);});
       h+='</div>';
     });
   }
@@ -689,7 +696,7 @@ function ksefItemHtml(it){
   return h;
 }
 var _ksefOpen={};
-function ksefToggleGroup(c){ _ksefOpen[c]=(_ksefOpen[c]===false); drawKsef(); }
+function ksefToggleGroup(c){ _ksefOpen[c]=!(_ksefOpen[c]===true); drawKsef(); }
 function ksefClearInbox(){
   if(!confirm('Usunąć WSZYSTKIE faktury z poczekalni? (pobrane, niezaksięgowane — będzie można pobrać ponownie z KSeF)'))return;
   fetch('/api/ksef/inbox',{method:'DELETE',headers:{'x-auth-token':tok()}})

@@ -1010,7 +1010,9 @@ function buildTable(rows,title,color,isCosts,secKey,defOpen){
     // Akcje
     h+='<div style="display:flex;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">';
     h+='<button onclick="openEdit(window._invIds.'+_iidx+')" style="padding:3px 8px;font-size:11px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;color:#374151">Edytuj</button>';
-    if(!i.attachmentUrl){
+    if(isKsefInv(i)){
+      h+='<button onclick="toggleKsefLedger(&quot;'+i.id+'&quot;,&quot;'+ksefNumberOf(i)+'&quot;)" style="padding:3px 8px;font-size:11px;border:1px solid #fcd34d;border-radius:6px;background:#fffbeb;cursor:pointer;color:#b45309">📄 Podgląd KSeF</button>';
+    } else if(!i.attachmentUrl){
       h+='<label style="cursor:pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="(function(f){uploadAttachment(window._invIds.'+_iidx+',f)})(this)"><span style="display:inline-flex;align-items:center;padding:3px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;color:#6b7280">+Zał.</span></label>';
     }
     h+='<button onclick="delInv(window._invIds.'+_iidx+')" style="padding:3px 8px;font-size:11px;border:1px solid #fca5a5;border-radius:6px;background:#fef2f2;cursor:pointer;color:#dc2626">Usuń</button>';

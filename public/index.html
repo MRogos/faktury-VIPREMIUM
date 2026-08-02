@@ -1220,7 +1220,9 @@ function calcVatRefund(coId){
   });
   var byC={};
   fi.forEach(function(i){
-    var cc=(i.vatCountry&&i.vatCountry!=='PL')?i.vatCountry:(i.currency||'EUR');
+    var cc=(i.vatCountry&&i.vatCountry!=='PL')?i.vatCountry
+      :(i.currency&&i.currency!=='PLN'?i.currency
+      :('VAT '+Number(i.vatRate)+'%'));
     if(!byC[cc])byC[cc]={country:cc,amount:0,invs:[]};
     byC[cc].amount+=Math.round(getForeignVatAmount(i)*100)/100;
     byC[cc].invs.push(i);
@@ -2282,22 +2284,34 @@ var HALF_VAT_KEYWORDS = ['DW7RE52','DX28899'];
 // Zagraniczni dostawcy paliwa - VAT zagraniczny (VAT-REF), nie wchodzi do PL
 var FOREIGN_VAT_SUPPLIERS = ['as24','morgan fuels','morgan fuel','tankpol','crt partner','uab crt','tfc','total energies','dkv','uta ','citronex'];
 
+// Polskie stawki VAT. Kazda inna dodatnia (19,20,21,25,27...) = VAT zagraniczny.
+var PL_VAT_RATES = [0, 3, 5, 7, 8, 23];
 function isForeignVatInv(inv){
-  // VAT-REF: faktura kosztowa w walucie obcej, na ktorej naliczono VAT (nie WDT/odwrotne obciazenie).
-  // Nie zalezy juz od waskiej listy dostawcow - lapie kazdego zagranicznego dostawce.
   if(inv.type==='sale')return false;
-  var obca = inv.currency && inv.currency!=='PLN';
-  var vatCharged = Number(inv.vatRate)>0 || (inv.vatAmount && inv.vatAmount>0);
-  return !!(obca && vatCharged);
+  var cont = (inv.contractor||'').toLowerCase();
+  var vendor = FOREIGN_VAT_SUPPLIERS.some(function(s){ return cont.indexOf(s) >= 0; });
+  var r = Number(inv.vatRate);
+  var foreignRate = r>0 && PL_VAT_RATES.indexOf(r)<0;             // 19/20/21...
+  var foreignCurr = inv.currency && inv.currency!=='PLN';         // EUR/GBP...
+  var foreignCountry = inv.vatCountry && inv.vatCountry!=='PL';   // oznaczony kraj
+  // Faktura zagraniczna (VAT-REF) jesli SPELNIA KTORYKOLWIEK warunek.
+  // Dostawca z listy wystarczy - nawet gdy faktura jest zaksiegowana w PLN i ze stawka 23%.
+  return !!(vendor || foreignRate || foreignCurr || foreignCountry);
 }
 
 function getForeignVatAmount(inv){
   if(!isForeignVatInv(inv)) return 0;
   var rate = inv.nbpRate || 1;
-  // VAT w walucie oryginalnej -> PLN po kursie NBP
-  if(inv.vatAmount && inv.vatAmount>0) return inv.vatAmount * rate;
-  var base = inv.bruttoOrig || inv.brutto;
-  return calcV(base, inv.vatRate) * rate;
+  var obca = inv.currency && inv.currency!=='PLN';
+  if(inv.vatAmount && inv.vatAmount>0){
+    // vatAmount w walucie faktury: obca -> przelicz kursem, PLN -> wprost
+    return obca ? inv.vatAmount * rate : inv.vatAmount;
+  }
+  if(obca && inv.bruttoOrig){
+    return calcV(inv.bruttoOrig, inv.vatRate) * rate;
+  }
+  // faktura w PLN (np. Staack/AS24 w zł) -> VAT liczony wprost z brutto
+  return calcV(inv.brutto, inv.vatRate);
 }
 
 function isHalfVatInv(inv){
@@ -2386,13 +2400,13 @@ function renderForeignVAT(){
   });
   var qForeignVatPLN=qForeignInvs.reduce(function(a,i){return a+getForeignVatAmount(i);},0);
 
-  // Group by currency
+  // Grupowanie spojne z Obliczeniami: kraj / waluta / stawka
   var byCurr={};
   foreignInvs.forEach(function(i){
-    var c=i.currency||'EUR';
-    if(!byCurr[c])byCurr[c]={vatOrig:0,vatPLN:0,cnt:0};
-    var vatOrig=calcV(i.bruttoOrig||i.brutto, i.vatRate);
-    byCurr[c].vatOrig+=vatOrig;
+    var c=(i.vatCountry&&i.vatCountry!=='PL')?i.vatCountry
+      :(i.currency&&i.currency!=='PLN'?i.currency
+      :('VAT '+Number(i.vatRate)+'%'));
+    if(!byCurr[c])byCurr[c]={vatPLN:0,cnt:0};
     byCurr[c].vatPLN+=getForeignVatAmount(i);
     byCurr[c].cnt++;
   });
@@ -2402,8 +2416,7 @@ function renderForeignVAT(){
     var d=byCurr[c];
     currRows+='<div style="background:var(--bg3);border-radius:8px;padding:10px">'
       +'<div style="font-size:11px;color:var(--muted);margin-bottom:3px">'+c+' ('+d.cnt+' faktur)</div>'
-      +'<div style="font-size:15px;font-weight:600;color:#60a8f0;font-family:var(--mono)">'+d.vatOrig.toFixed(2)+' '+c+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">&asymp; '+fmt(d.vatPLN)+'</div>'
+      +'<div style="font-size:15px;font-weight:600;color:#60a8f0;font-family:var(--mono)">'+fmt(d.vatPLN)+'</div>'
       +'</div>';
   });
 

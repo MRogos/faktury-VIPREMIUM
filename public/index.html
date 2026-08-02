@@ -487,8 +487,8 @@ function stats(coId){
     var mDt=!selYear||(i.date&&i.date.indexOf(prefix)===0);
     return mCo&&mDt;
   });
-  var s=inv.filter(function(i){return i.type==='sale';});
-  var b=inv.filter(function(i){return i.type==='buy';});
+  var s=inv.filter(function(i){return i.type==='sale'&&!isInternalInv(i);});
+  var b=inv.filter(function(i){return i.type==='buy'&&!isInternalInv(i);});
   var gI=0,gO=0,nI=0,nO=0,vI=0,vO=0,pO=0,uO=0;
   s.forEach(function(i){gI+=i.brutto;nI+=netInv(i);vI+=vatInv(i);});
   b.forEach(function(i){gO+=i.brutto;nO+=calcNettoForInv(i);vO+=calcVatForInv(i);if(i.paid)pO+=i.brutto;else uO+=i.brutto;});
@@ -805,6 +805,7 @@ function renderLedger(){
   var overdue=sortInvs(base.filter(function(i){return i.type==='buy'&&isOverdue(i);}));
   var sales=sortInvs(base.filter(function(i){return i.type==='sale';}));
   var costs=sortInvs(base.filter(function(i){return i.type==='buy';}));
+  var topay=sortInvs(base.filter(function(i){return i.type==='buy'&&!i.paid;}));
   function sumL(a){return a.reduce(function(s,i){return s+(i.brutto||0);},0);}
   function plF(n){n=Math.abs(n);if(n===1)return 'faktura';var d=n%10,h=n%100;return (d>=2&&d<=4&&!(h>=12&&h<=14))?'faktury':'faktur';}
   function tileH(key,icon,label,color,cnt,total,on){
@@ -818,6 +819,7 @@ function renderLedger(){
   var tilesHtml='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">'
     +tileH('buy','📉','KOSZTY','#f59e0b',costs.length,sumL(costs),costsActive)
     +tileH('sale','📈','PRZYCHODY','#16a34a',sales.length,sumL(sales),selLedgerCat==='sale')
+    +tileH('topay','💸','DO OPŁACENIA','#0891b2',topay.length,sumL(topay),selLedgerCat==='topay')
     +tileH('overdue','⚠️','PRZETERMINOWANE','#ef4444',overdue.length,sumL(overdue),selLedgerCat==='overdue')
     +'</div>';
 
@@ -890,6 +892,8 @@ function renderLedger(){
     html+= sales.length?buildTable(sales,'📈 PRZYCHODY','#16a34a',false):'<div class="empty">Brak przychodów w tym okresie</div>';
   } else if(ac==='overdue'){
     html+= overdue.length?buildTable(overdue,'⚠️ PRZETERMINOWANE','#ef4444',true):'<div class="empty">Brak przeterminowanych 🎉</div>';
+  } else if(ac==='topay'){
+    html+= topay.length?buildTable(topay,'💸 DO OPŁACENIA','#0891b2',true):'<div class="empty">Wszystko opłacone 🎉</div>';
   } else if(ac==='buy'||isCat){
     // Podział na podkategorie dopiero tutaj — pod kaflem KOSZTY
     html+='<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:12px">';
@@ -1211,15 +1215,14 @@ function renderOffice(){
 function calcVatRefund(coId){
   var prefix=selYear+(selMonth?'-'+selMonth:'');
   var fi=invs.filter(function(i){
-    return i.type==='buy'&&i.costCat==='fuel'&&i.vatCountry&&i.vatCountry!=='PL'
-      &&i.vatAmount&&i.vatAmount>0&&(coId==='all'||i.company===coId)
+    return i.type==='buy'&&isForeignVatInv(i)&&(coId==='all'||i.company===coId)
       &&(!selYear||(i.date&&i.date.indexOf(prefix)===0));
   });
   var byC={};
   fi.forEach(function(i){
-    var cc=i.vatCountry;
+    var cc=(i.vatCountry&&i.vatCountry!=='PL')?i.vatCountry:(i.currency||'EUR');
     if(!byC[cc])byC[cc]={country:cc,amount:0,invs:[]};
-    byC[cc].amount+=Math.round((i.vatAmount*(i.nbpRate||1))*100)/100;
+    byC[cc].amount+=Math.round(getForeignVatAmount(i)*100)/100;
     byC[cc].invs.push(i);
   });
   return byC;
@@ -2280,20 +2283,21 @@ var HALF_VAT_KEYWORDS = ['DW7RE52','DX28899'];
 var FOREIGN_VAT_SUPPLIERS = ['as24','morgan fuels','morgan fuel','tankpol','crt partner','uab crt','tfc','total energies','dkv','uta ','citronex'];
 
 function isForeignVatInv(inv){
-  var cont = (inv.contractor||'').toLowerCase();
-  // Tylko faktury w walucie innej niz PLN od zagranicznych dostawcow paliwa
-  return inv.currency !== 'PLN' && FOREIGN_VAT_SUPPLIERS.some(function(s){ return cont.indexOf(s) >= 0; });
+  // VAT-REF: faktura kosztowa w walucie obcej, na ktorej naliczono VAT (nie WDT/odwrotne obciazenie).
+  // Nie zalezy juz od waskiej listy dostawcow - lapie kazdego zagranicznego dostawce.
+  if(inv.type==='sale')return false;
+  var obca = inv.currency && inv.currency!=='PLN';
+  var vatCharged = Number(inv.vatRate)>0 || (inv.vatAmount && inv.vatAmount>0);
+  return !!(obca && vatCharged);
 }
 
 function getForeignVatAmount(inv){
   if(!isForeignVatInv(inv)) return 0;
-  // VAT zagraniczny w PLN = VAT w walucie oryginalnej × kurs NBP
-  if(inv.bruttoOrig && inv.nbpRate){
-    var vatOrig = calcV(inv.bruttoOrig, inv.vatRate);
-    return vatOrig * inv.nbpRate;
-  }
-  // Fallback - waluta PLN (nie powinno się zdarzyć)
-  return calcV(inv.brutto, inv.vatRate);
+  var rate = inv.nbpRate || 1;
+  // VAT w walucie oryginalnej -> PLN po kursie NBP
+  if(inv.vatAmount && inv.vatAmount>0) return inv.vatAmount * rate;
+  var base = inv.bruttoOrig || inv.brutto;
+  return calcV(base, inv.vatRate) * rate;
 }
 
 function isHalfVatInv(inv){
@@ -2407,7 +2411,7 @@ function renderForeignVAT(){
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
     +'<div>'
     +'<div style="font-size:13px;font-weight:700;color:#60a8f0;margin-bottom:2px">&#127758; VAT ZAGRANICZNY DO ZWROTU (VAT-REF)</div>'
-    +'<div style="font-size:11px;color:var(--muted)">AS24, Morgan Fuels, CRT Partner, Tankpol, TFC &mdash; nie wchodzi do rozliczenia PL</div>'
+    +'<div style="font-size:11px;color:var(--muted)">Faktury w walucie obcej z naliczonym VAT &mdash; do odzyskania (VAT-REF), nie wchodzi do rozliczenia PL</div>'
     +'</div>'
     +'<div style="text-align:right">'
     +'<div style="font-size:11px;color:var(--muted)">'+curQ+' '+selYear+'</div>'

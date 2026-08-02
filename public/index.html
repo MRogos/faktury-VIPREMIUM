@@ -487,7 +487,7 @@ function stats(coId){
     var mDt=!selYear||(i.date&&i.date.indexOf(prefix)===0);
     return mCo&&mDt;
   });
-  var s=inv.filter(function(i){return i.type==='sale'&&!isInternalInv(i);});
+  var s=inv.filter(function(i){return i.type==='sale';});
   var b=inv.filter(function(i){return i.type==='buy'&&!isInternalInv(i);});
   var gI=0,gO=0,nI=0,nO=0,vI=0,vO=0,pO=0,uO=0;
   s.forEach(function(i){gI+=i.brutto;nI+=netInv(i);vI+=vatInv(i);});
@@ -2288,15 +2288,11 @@ var FOREIGN_VAT_SUPPLIERS = ['as24','morgan fuels','morgan fuel','tankpol','crt 
 var PL_VAT_RATES = [0, 3, 5, 7, 8, 23];
 function isForeignVatInv(inv){
   if(inv.type==='sale')return false;
-  var cont = (inv.contractor||'').toLowerCase();
-  var vendor = FOREIGN_VAT_SUPPLIERS.some(function(s){ return cont.indexOf(s) >= 0; });
   var r = Number(inv.vatRate);
-  var foreignRate = r>0 && PL_VAT_RATES.indexOf(r)<0;             // 19/20/21...
+  var foreignRate = r>0 && PL_VAT_RATES.indexOf(r)<0;             // 19/20/21... = zagraniczna. 23% = polska, NIE.
   var foreignCurr = inv.currency && inv.currency!=='PLN';         // EUR/GBP...
-  var foreignCountry = inv.vatCountry && inv.vatCountry!=='PL';   // oznaczony kraj
-  // Faktura zagraniczna (VAT-REF) jesli SPELNIA KTORYKOLWIEK warunek.
-  // Dostawca z listy wystarczy - nawet gdy faktura jest zaksiegowana w PLN i ze stawka 23%.
-  return !!(vendor || foreignRate || foreignCurr || foreignCountry);
+  var foreignCountry = inv.vatCountry && inv.vatCountry!=='PL';   // oznaczony kraj != PL
+  return !!(foreignRate || foreignCurr || foreignCountry);
 }
 
 function getForeignVatAmount(inv){

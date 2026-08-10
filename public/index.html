@@ -1552,7 +1552,7 @@ function renderSForm(){
     var vatPLN = vatOrig * (pending.nbpRate||1);
     nbp += '<div style="background:rgba(96,168,240,.1);border:0.5px solid rgba(96,168,240,.3);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12px;line-height:1.8;color:#60a8f0">'
       +'<b>&#127758; Faktura z VAT zagranicznym (VAT-REF)</b><br>'
-      +'Dostawca: '+pending.contractor+' &mdash; paliwo zagraniczne<br>'
+      +'Dostawca: '+pending.contractor+'<br>'
       +'Koszt ksiegowy = NETTO: <b>'+(pending.bruttoOrig?calcN(pending.bruttoOrig,pending.vatRate).toFixed(2)+' '+pending.currency+' = ':'')+calcN(pending.brutto,pending.vatRate).toFixed(2)+' PLN</b><br>'
       +'VAT do odzyskania (VAT-REF): <b>'+vatOrig.toFixed(2)+' '+(pending.currency||'EUR')+' &asymp; '+vatPLN.toFixed(2)+' PLN</b><br>'
       +'<span style="opacity:.7">VAT nie wchodzi do rozliczenia PL &mdash; odzyskiwany osobno kwartalnie</span>'

@@ -2291,10 +2291,9 @@ var PL_VAT_RATES = [0, 3, 5, 7, 8, 23];
 function isForeignVatInv(inv){
   if(inv.type==='sale')return false;
   var r = Number(inv.vatRate);
-  var foreignRate = r>0 && PL_VAT_RATES.indexOf(r)<0;             // 19/20/21... = zagraniczna. 23% = polska, NIE.
-  var foreignCurr = inv.currency && inv.currency!=='PLN';         // EUR/GBP...
-  var foreignCountry = inv.vatCountry && inv.vatCountry!=='PL';   // oznaczony kraj != PL
-  return !!(foreignRate || foreignCurr || foreignCountry);
+  // JEDYNE kryterium: stawka spoza polskich (23/8/5/0) = zagraniczna.
+  // Waluta NIE decyduje - polska faktura (MAN, AS24 PL) moze byc w EUR i to nadal polski VAT.
+  return r>0 && PL_VAT_RATES.indexOf(r)<0;
 }
 
 function getForeignVatAmount(inv){

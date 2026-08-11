@@ -2288,12 +2288,16 @@ var FOREIGN_VAT_SUPPLIERS = ['as24','morgan fuels','morgan fuel','tankpol','crt 
 
 // Polskie stawki VAT. Kazda inna dodatnia (19,20,21,25,27...) = VAT zagraniczny.
 var PL_VAT_RATES = [0, 3, 5, 7, 8, 23];
+// Dostawcy wylacznie zagraniczni - VAT-REF zawsze, niezaleznie od odczytanej stawki.
+// (Tankpool = tylko Niemcy 19%, Morgan = tylko Anglia 20%). AS24 NIE tu - jest mieszany PL/UK.
+var ALWAYS_FOREIGN_VENDORS = ['tankpool','tank pool','morgan fuel','morgan fuels'];
 function isForeignVatInv(inv){
   if(inv.type==='sale')return false;
   var r = Number(inv.vatRate);
-  // JEDYNE kryterium: stawka spoza polskich (23/8/5/0) = zagraniczna.
-  // Waluta NIE decyduje - polska faktura (MAN, AS24 PL) moze byc w EUR i to nadal polski VAT.
-  return r>0 && PL_VAT_RATES.indexOf(r)<0;
+  var foreignRate = r>0 && PL_VAT_RATES.indexOf(r)<0;            // 19/20/21% = zagraniczna (np. AS24 UK)
+  var cont = (inv.contractor||'').toLowerCase();
+  var alwaysForeign = ALWAYS_FOREIGN_VENDORS.some(function(s){ return cont.indexOf(s)>=0; });
+  return !!(foreignRate || alwaysForeign);
 }
 
 function getForeignVatAmount(inv){

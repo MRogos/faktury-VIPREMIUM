@@ -851,6 +851,7 @@ function renderLedger(){
       +'<option value="date"'+(ledgerSortBy==='date'?' selected':'')+'>Sortuj: data wyst.</option>'
       +'<option value="due"'+(ledgerSortBy==='due'?' selected':'')+'>Sortuj: termin</option>'
       +'<option value="amount"'+(ledgerSortBy==='amount'?' selected':'')+'>Sortuj: kwota</option>'
+      +'<option value="num"'+(ledgerSortBy==='num'?' selected':'')+'>Sortuj: numer</option>'
       +'</select>';
     _lh+='</div>';
         g('lfilters').innerHTML=_lh;
@@ -882,6 +883,11 @@ function renderLedger(){
         return a.dueDate.localeCompare(b.dueDate);
       }
       if(ledgerSortBy==='amount')return b.brutto-a.brutto;
+      if(ledgerSortBy==='num'){
+        var an=a.num||'',bn=b.num||'';
+        if(!an&&!bn)return 0; if(!an)return 1; if(!bn)return -1;
+        return bn.localeCompare(an,undefined,{numeric:true,sensitivity:'base'});
+      }
       return new Date(b.date)-new Date(a.date);
     });
   }

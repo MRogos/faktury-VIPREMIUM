@@ -375,7 +375,7 @@ function toggleLedgerSec(key){
   renderLedger();
 }
 function setLedgerCat(v){selLedgerCat=(v==='__null__')?null:v;renderLedger();}
-function pickTile(k){selLedgerCat=(selLedgerCat===k)?null:k;sel={};renderLedger();}
+function pickTile(k){selLedgerCat=(selLedgerCat===k)?null:k;sel={};renderLedger();setTimeout(function(){var el=g('lfilters')||g('ltable');if(el){try{el.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}}},60);}
 function pickCostCat(c){selLedgerCat=c;sel={};renderLedger();}
 var ledgerDateFrom='';
 var ledgerDateTo='';
@@ -797,7 +797,7 @@ function renderLedger(){
     +'<div class="metric"><div class="ml">Wynik netto</div><div class="mv '+(all.bal>=0?'pos':'neg')+'">'+fmt(all.bal)+'</div></div>'
     +'<div class="metric"><div class="ml">VAT do zapłaty</div><div class="mv '+(all.vatDue>0?'warn':all.vatDue<0?'pos':'')+'">'+fmt(all.vatDue)+'</div></div>'
     +'<div class="metric" style="border-left:3px solid #22c55e"><div class="ml">Opłacone</div><div class="mv" style="color:#16a34a">'+fmt(all.pO)+'</div></div>'
-    +'<div class="metric" style="border-left:3px solid var(--amber)"><div class="ml">Do opłacenia</div><div class="mv warn">'+fmt(all.uO)+'</div></div>'
+    +'<div class="metric" onclick="pickTile(&quot;topay&quot;)" style="border-left:3px solid var(--amber);cursor:pointer" title="Kliknij, aby zobaczyć faktury do opłacenia"><div class="ml">Do opłacenia ▾</div><div class="mv warn">'+fmt(all.uO)+'</div></div>'
     +'</div>';
 
   var prefix=selYear+(selMonth?'-'+selMonth:'');
@@ -807,7 +807,7 @@ function renderLedger(){
   var overdue=sortInvs(base.filter(function(i){return i.type==='buy'&&isOverdue(i);}));
   var sales=sortInvs(base.filter(function(i){return i.type==='sale';}));
   var costs=sortInvs(base.filter(function(i){return i.type==='buy';}));
-  var topay=sortInvs(base.filter(function(i){return i.type==='buy'&&!i.paid;}));
+  var topay=sortInvs(base.filter(function(i){return i.type==='buy'&&!i.paid&&!isInternalInv(i);}));
   function sumL(a){return a.reduce(function(s,i){return s+(i.brutto||0);},0);}
   function plF(n){n=Math.abs(n);if(n===1)return 'faktura';var d=n%10,h=n%100;return (d>=2&&d<=4&&!(h>=12&&h<=14))?'faktury':'faktur';}
   function tileH(key,icon,label,color,cnt,total,on){

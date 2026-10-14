@@ -301,6 +301,7 @@ var CATS=[
   {id:'office',  label:'Biuro',           icon:'🏢'},
   {id:'driver',  label:'Kierowcy wypłata',icon:'👤'},
   {id:'internal',label:'Koszt wewnętrzny',icon:'🔄'},
+  {id:'unknown', label:'Nieznany',        icon:'❓'},
   {id:'other',   label:'Inne',            icon:'📦'}
 ];
 
@@ -344,6 +345,7 @@ var COST_CATS=[
   {id:'warsztat',label:'Warsztat',        icon:'🛠️'},
   {id:'toll',    label:'Autostrady',      icon:'🛣️'},
   {id:'customs', label:'Odprawa celna',   icon:'📋'},
+  {id:'unknown', label:'Nieznany',        icon:'❓'},
   {id:'other',   label:'Koszty dodatkowe',icon:'📦'}
 ];
 var invs=[],pending=null,curTab='dash',userRole='owner';
@@ -948,6 +950,7 @@ function buildTable(rows,title,color,isCosts,secKey,defOpen){
     h+='<button class="sm" onclick="selAll(true,'+varName+')" style="font-size:11px">&#9745; Zaznacz</button>';
     if(selIds.length>0){
       if(isCosts){h+='<button class="sm prim" onclick="markSelPaid()" style="font-size:11px">&#10003; Oznacz opłacone</button>';}
+      h+='<button class="sm" onclick="downloadSel()" style="font-size:11px">&#11015; Pobierz ('+selIds.length+')</button>';
       h+='<button class="sm del" onclick="delSel()" style="font-size:11px">&#128465; Usuń ('+selIds.length+')</button>';
       h+='<button class="sm" onclick="sel={};renderLedger()" style="font-size:11px">&#10005;</button>';
     }
@@ -1948,6 +1951,17 @@ function markSelPaid(){
     }
   });
   p.then(function(){sel={};renderLedger();renderFirms();});
+}
+function downloadSel(){
+  var ids=Object.keys(sel);if(!ids.length)return;
+  fetch('/api/invoices/download-zip',{method:'POST',headers:ah(),body:JSON.stringify({ids:ids})})
+  .then(function(r){ if(!r.ok){return r.json().then(function(j){throw new Error(j.error||('Błąd '+r.status));});} return r.blob(); })
+  .then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');a.href=url;a.download='faktury.zip';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},1500);
+  }).catch(function(e){alert('Błąd pobierania: '+e.message);});
 }
 function delSel(){
   var ids=Object.keys(sel);if(!ids.length)return;

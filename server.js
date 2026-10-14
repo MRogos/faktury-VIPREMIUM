@@ -362,6 +362,47 @@ app.get('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
   }
 });
 
+// POST pobierz ZIP z plikami zaznaczonych faktur (zalaczniki R2 + XML-e KSeF)
+app.post('/api/invoices/download-zip', requireAuth, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Brak zaznaczonych faktur' });
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    const used = {};
+    const safe = (s) => String(s || 'faktura').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const uniq = (base, ext) => { let n = base + ext, k = 1; while (used[n]) { n = base + '_' + (k++) + ext; } used[n] = 1; return n; };
+    let added = 0;
+    for (const id of ids) {
+      const r = await pool.query('SELECT id, num, attachment_url, note FROM invoices WHERE id=$1', [id]);
+      const inv = r.rows[0];
+      if (!inv) continue;
+      const base = safe(inv.num || inv.id);
+      if (inv.attachment_url && r2) {
+        try {
+          const obj = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: inv.attachment_url }));
+          const bytes = await obj.Body.transformToByteArray();
+          const m = String(inv.attachment_url).match(/\.[a-zA-Z0-9]{1,5}$/);
+          zip.addFile(uniq(base, m ? m[0] : '.pdf'), Buffer.from(bytes));
+          added++;
+        } catch (e) { /* pomijamy pojedynczy blad */ }
+      } else if (inv.note && inv.note.indexOf('KSeF:') === 0) {
+        const nr = inv.note.replace(/^KSeF:\s*/, '').trim();
+        const kr = await pool.query('SELECT xml_raw FROM ksef_inbox WHERE ksef_number=$1', [nr]);
+        if (kr.rows[0] && kr.rows[0].xml_raw) {
+          zip.addFile(uniq(base, '.xml'), Buffer.from(kr.rows[0].xml_raw, 'utf8'));
+          added++;
+        }
+      }
+    }
+    if (!added) return res.status(404).json({ error: 'Zaznaczone faktury nie mają plików do pobrania' });
+    const buf = zip.toBuffer();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="faktury.zip"');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE attachment
 app.delete('/api/invoices/:id/attachment', requireAuth, async (req, res) => {
   try {

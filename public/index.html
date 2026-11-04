@@ -1479,12 +1479,15 @@ function sfile(file){
       ||allLow.indexOf('diesel')>=0||allLow.indexOf('dieseline')>=0
       ||allLow.indexOf('fuel')>=0)
       autoCat='fuel';
-    // Serwis - Vipremium Marcin Rogowski (warsztat), serwisy zewnetrzne
-    else if(allLow.indexOf('vipremium marcin rogowski')>=0
-      ||allLow.indexOf('rogowski')>=0
-      ||allLow.indexOf('serwis')>=0||allLow.indexOf('servis')>=0
+    // Warsztat - wlasny warsztat (Vipremium Marcin Rogowski) i wszystko z "warsztat"
+    else if(allLow.indexOf('warsztat')>=0
+      ||allLow.indexOf('vipremium marcin rogowski')>=0
+      ||allLow.indexOf('rogowski')>=0)
+      autoCat='warsztat';
+    // Serwis - serwisy zewnetrzne, naprawy, opony
+    else if(allLow.indexOf('serwis')>=0||allLow.indexOf('servis')>=0
       ||allLow.indexOf('naprawa')>=0||allLow.indexOf('repair')>=0
-      ||allLow.indexOf('warsztat')>=0||allLow.indexOf('opona')>=0
+      ||allLow.indexOf('opona')>=0
       ||allLow.indexOf('tyre')>=0||allLow.indexOf('tire')>=0)
       autoCat='service';
     // Autostrady

@@ -2680,6 +2680,9 @@ function renderVehicles(){
   var offTotal=buyInvs.filter(function(i){return i.costCat==='office';})
     .reduce(function(a,i){return a+i.brutto;},0);
   var offPerVeh=FLEET.length>0?Math.round(offTotal/FLEET.length*100)/100:0;
+  var warszTotal=buyInvs.filter(function(i){return i.costCat==='warsztat';})
+    .reduce(function(a,i){return a+i.brutto;},0);
+  var warszPerVeh=FLEET.length>0?Math.round(warszTotal/FLEET.length*100)/100:0;
 
   function getVehShare(inv,veh){
     if(inv.vehicleBreakdown&&inv.vehicleBreakdown.length){
@@ -2705,7 +2708,7 @@ function renderVehicles(){
     var vehInvs=buyInvs.filter(function(i){return (i.vehicles||[]).indexOf(veh)>=0;});
     vehInvs.forEach(function(i){
       var cat=i.costCat||'other';
-      if(cat==='customs'||cat==='office')return;
+      if(cat==='customs'||cat==='office'||cat==='warsztat')return;
       if(cat==='fixed'){
         var allLow=(i.contractor||'').toLowerCase()+' '+(i.description||'').toLowerCase();
         var isIns=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
@@ -2734,7 +2737,7 @@ function renderVehicles(){
       var isIns=INSURANCE_KEYWORDS.some(function(k){return allLow.indexOf(k)>=0;});
       cats['fixed']+=Math.round((isIns?i.brutto/12:i.brutto)/FLEET.length*100)/100;
     });
-    cats['customs']=customsPerVeh;cats['office']=offPerVeh;
+    cats['customs']=customsPerVeh;cats['office']=offPerVeh;cats['warsztat']=warszPerVeh;
     var total=VCOLS.reduce(function(a,c){return a+cats[c.id];},0);
     return {veh:veh,cats:cats,total:total};
   });

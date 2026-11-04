@@ -952,6 +952,7 @@ function buildTable(rows,title,color,isCosts,secKey,defOpen){
     h+='<button class="sm" onclick="selAll(true,'+varName+')" style="font-size:11px">&#9745; Zaznacz</button>';
     if(selIds.length>0){
       if(isCosts){h+='<button class="sm prim" onclick="markSelPaid()" style="font-size:11px">&#10003; Oznacz opłacone</button>';}
+      if(isCosts){h+='<select onchange="if(this.value){bulkSetCategory(this.value);this.selectedIndex=0;}" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer"><option value="">Zmień kategorię…</option>'+CATS.map(function(c){return '<option value="'+c.id+'">'+c.icon+' '+c.label+'</option>';}).join('')+'</select>';}
       h+='<button class="sm" onclick="downloadSel()" style="font-size:11px">&#11015; Pobierz ('+selIds.length+')</button>';
       h+='<button class="sm del" onclick="delSel()" style="font-size:11px">&#128465; Usuń ('+selIds.length+')</button>';
       h+='<button class="sm" onclick="sel={};renderLedger()" style="font-size:11px">&#10005;</button>';
@@ -1956,6 +1957,15 @@ function markSelPaid(){
     }
   });
   p.then(function(){sel={};renderLedger();renderFirms();});
+}
+function bulkSetCategory(cat){
+  var ids=Object.keys(sel);if(!ids.length)return;
+  var c=CATS.find(function(x){return x.id===cat;});
+  if(!confirm('Zmienić kategorię '+ids.length+' faktur na "'+(c?c.label:cat)+'"?'))return;
+  fetch('/api/invoices/bulk-category',{method:'POST',headers:ah(),body:JSON.stringify({ids:ids,costCat:cat})})
+  .then(function(r){ if(!r.ok){return r.json().then(function(j){throw new Error(j.error||('Błąd '+r.status));});} return r.json(); })
+  .then(function(d){ sel={}; loadInvs(); })
+  .catch(function(e){alert('Błąd: '+e.message);});
 }
 function downloadSel(){
   var ids=Object.keys(sel);if(!ids.length)return;

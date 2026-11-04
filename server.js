@@ -303,6 +303,19 @@ app.patch('/api/invoices/:id/note', requireAuth, async (req, res) => {
   }
 });
 
+// Hurtowa zmiana kategorii kosztu dla zaznaczonych faktur
+app.post('/api/invoices/bulk-category', requireAuth, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 1000) : [];
+    const costCat = String(req.body.costCat || '').slice(0, 20);
+    if (!ids.length || !costCat) return res.status(400).json({ error: 'Brak faktur lub kategorii' });
+    const r = await pool.query('UPDATE invoices SET cost_cat = $1 WHERE id = ANY($2::text[])', [costCat, ids]);
+    res.json({ ok: true, updated: r.rowCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PATCH due date
 app.patch('/api/invoices/:id/due', requireAuth, async (req, res) => {
   try {
